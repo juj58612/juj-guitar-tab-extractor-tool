@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>吉他六線譜自動擷取工具</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="wrap">
+    <h1>🎸 吉他六線譜自動擷取工具</h1>
+    <p class="sub">上傳教學影片，自動去除重複畫面、擷取六線譜片段，拼成完整樂譜 PDF。</p>
+
+    <!-- Step 1: 上傳 -->
+    <section id="step-upload" class="card">
+      <h2>1. 提供影片</h2>
+      <div class="tabbar">
+        <button type="button" id="tabFile" class="tab-btn active">上傳檔案</button>
+        <button type="button" id="tabUrl" class="tab-btn">貼上網址</button>
+      </div>
+
+      <div id="panelFile">
+        <div id="dropzone" class="dropzone">
+          <p>把影片拖曳到這裡，或點擊選擇檔案</p>
+          <input type="file" id="fileInput" accept="video/*">
+        </div>
+      </div>
+
+      <div id="panelUrl" class="hidden">
+        <div class="row">
+          <input type="text" id="urlInput" placeholder="貼上影片網址 (例如 YouTube / Bilibili 影片連結)" style="flex:1;">
+          <button id="urlSubmitBtn">下載並分析</button>
+        </div>
+        <p class="hint">請確保你有權利下載與使用這部影片，僅供個人練習/教學用途；下載內容的版權責任由使用者自行負責。</p>
+      </div>
+
+      <div id="uploadStatus" class="hint"></div>
+    </section>
+
+    <!-- Step 2: 框選 -->
+    <section id="step-crop" class="card hidden">
+      <h2>2. 確認譜面區域</h2>
+      <p class="hint">已自動偵測譜面所在位置(綠色框)。若不準確，請直接拖曳框線邊緣調整；也可以拖曳下方時間軸換一張畫面。</p>
+      <div id="cropStage" class="crop-stage">
+        <img id="previewImg" src="" alt="preview">
+        <div id="cropBox" class="crop-box">
+          <div class="handle nw"></div><div class="handle ne"></div>
+          <div class="handle sw"></div><div class="handle se"></div>
+        </div>
+      </div>
+      <div class="row">
+        <label>預覽時間點：</label>
+        <input type="range" id="previewSeek" min="0" max="100" value="40">
+        <span id="previewSeekLabel"></span>
+      </div>
+    </section>
+
+    <!-- Step 3: 參數 -->
+    <section id="step-params" class="card hidden">
+      <h2>3. 設定 (一般不用改，用預設值即可)</h2>
+      <div class="grid">
+        <label>樂譜標題
+          <input type="text" id="titleInput" value="吉他六線譜">
+        </label>
+        <label>紙張大小
+          <select id="pageSizeInput">
+            <option value="A4">A4</option>
+            <option value="Letter">Letter</option>
+          </select>
+        </label>
+        <label>取樣間隔（秒，越小越精細但越慢）
+          <input type="number" id="strideInput" value="0.5" step="0.1" min="0.1" max="3">
+        </label>
+        <label>去重複敏感度 %（數字越大，越容易把相似畫面判定為重複）
+          <input type="range" id="simInput" min="0" max="30" value="6">
+          <span id="simLabel">6</span>
+        </label>
+      </div>
+
+      <div class="row">
+        <label class="checkbox-label">
+          <input type="checkbox" id="bwInput">
+          黑白清晰化 (把譜面轉成純黑白，線條/文字更清晰銳利)
+        </label>
+        <button type="button" id="bwPreviewBtn">👀 先看看黑白效果</button>
+      </div>
+      <div id="bwPreviewWrap" class="hidden">
+        <p class="hint">這是目前框選區域套用黑白清晰化後的樣子，確定滿意再勾選上面的選項：</p>
+        <img id="bwPreviewImg" src="" alt="黑白預覽" style="max-width:100%;border:1px solid var(--border);border-radius:6px;">
+      </div>
+
+      <button id="startBtn" class="primary">🚀 開始自動產生樂譜</button>
+    </section>
+
+    <!-- Step 4: 進度 -->
+    <section id="step-progress" class="card hidden">
+      <h2 id="stepProgressTitle">處理中...</h2>
+      <div class="progress-outer"><div id="progressBar" class="progress-inner"></div></div>
+      <div id="progressMsg" class="hint"></div>
+    </section>
+
+    <!-- Step 5: 結果 -->
+    <section id="step-result" class="card hidden">
+      <h2>✅ 完成！</h2>
+      <p id="resultSummary"></p>
+      <a id="downloadBtn" class="primary" href="#" download>⬇️ 下載樂譜 PDF</a>
+      <button id="restartBtn">重新開始</button>
+    </section>
+
+    <div id="errorBox" class="error hidden"></div>
+  </div>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
