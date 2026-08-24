@@ -306,6 +306,7 @@ def _run_job(job_id, params):
             density_threshold=params.get("density_threshold"),
             similarity_threshold=params["similarity_threshold"],
             title=params["title"],
+            subtitle=params.get("subtitle", ""),
             page_size=params["page_size"],
             bw_enhance=params.get("bw_enhance", False),
             progress_cb=progress_cb,
@@ -342,6 +343,7 @@ def api_process():
         "density_threshold": data.get("density_threshold"),
         "similarity_threshold": int(data.get("similarity_threshold", 6)),
         "title": data.get("title") or "吉他六線譜",
+        "subtitle": (data.get("subtitle") or "").strip(),
         "page_size": data.get("page_size") or "A4",
         "bw_enhance": bool(data.get("bw_enhance", False)),
     }

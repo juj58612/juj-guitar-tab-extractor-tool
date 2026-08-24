@@ -256,6 +256,7 @@ def process_video(
     density_threshold=None,
     similarity_threshold=6,
     title="吉他六線譜",
+    subtitle="",
     page_size="A4",
     bw_enhance=False,
     progress_cb=None,
@@ -408,7 +409,7 @@ def process_video(
         sections.append({"t": t, "path": fpath, "filename": fname})
 
     pdf_path = os.path.join(out_dir, "guitar_tab_score.pdf")
-    build_pdf([s["path"] for s in sections], pdf_path, title=title, page_size=page_size)
+    build_pdf([s["path"] for s in sections], pdf_path, title=title, subtitle=subtitle, page_size=page_size)
 
     report(100, "完成！")
     return {
@@ -430,13 +431,15 @@ PAGE_SIZES_PX = {
 }
 
 
-def build_pdf(image_paths, out_path, title="吉他六線譜", page_size="A4"):
+def build_pdf(image_paths, out_path, title="吉他六線譜", subtitle="", page_size="A4"):
     if not image_paths:
         raise RuntimeError("沒有可用的譜面圖片可以組成 PDF")
 
+    subtitle = (subtitle or "").strip()
+
     page_w, page_h = PAGE_SIZES_PX.get(page_size, PAGE_SIZES_PX["A4"])
     margin = 40
-    header_h = 70
+    header_h = 95 if subtitle else 70
     gap = 18
     content_w = page_w - margin * 2
 
@@ -459,6 +462,12 @@ def build_pdf(image_paths, out_path, title="吉他六線譜", page_size="A4"):
             except Exception:
                 font = ImageFont.load_default()
             draw.text((margin, 20), title, fill="black", font=font)
+            if subtitle:
+                try:
+                    sub_font = ImageFont.truetype(BUNDLED_FONT, 16)
+                except Exception:
+                    sub_font = font
+                draw.text((margin, 56), subtitle, fill=(100, 100, 100), font=sub_font)
             draw.text(
                 (page_w - margin - 60, page_h - 30),
                 "- {} -".format(page_no),

@@ -35,6 +35,7 @@
     previewSeekLabel: document.getElementById("previewSeekLabel"),
 
     titleInput: document.getElementById("titleInput"),
+    subtitleInput: document.getElementById("subtitleInput"),
     pageSizeInput: document.getElementById("pageSizeInput"),
     strideInput: document.getElementById("strideInput"),
     simInput: document.getElementById("simInput"),
@@ -54,6 +55,35 @@
 
     errorBox: document.getElementById("errorBox"),
   };
+
+  // ---------------- 記住上次輸入的標題/副標題 ----------------
+  // 避免每次重新整理頁面/開新分析時，使用者忘記重新輸入自訂標題，
+  // 導致 PDF 又跑回預設標題（之前使用者實際回報過這個狀況）。
+  var TITLE_STORAGE_KEY = "guitar_tab_extractor_title";
+  var SUBTITLE_STORAGE_KEY = "guitar_tab_extractor_subtitle";
+
+  (function restoreTitleFields() {
+    try {
+      var savedTitle = window.localStorage.getItem(TITLE_STORAGE_KEY);
+      if (savedTitle) el.titleInput.value = savedTitle;
+      var savedSubtitle = window.localStorage.getItem(SUBTITLE_STORAGE_KEY);
+      if (savedSubtitle) el.subtitleInput.value = savedSubtitle;
+    } catch (e) {
+      // localStorage 不可用時（例如某些隱私模式）就單純略過，不影響其他功能
+    }
+  })();
+
+  function persistTitleFields() {
+    try {
+      window.localStorage.setItem(TITLE_STORAGE_KEY, el.titleInput.value || "");
+      window.localStorage.setItem(SUBTITLE_STORAGE_KEY, el.subtitleInput.value || "");
+    } catch (e) {
+      // 略過
+    }
+  }
+
+  el.titleInput.addEventListener("input", persistTitleFields);
+  el.subtitleInput.addEventListener("input", persistTitleFields);
 
   function showError(msg) {
     el.errorBox.textContent = "發生錯誤：" + msg;
@@ -354,6 +384,7 @@
       stride_sec: Number(el.strideInput.value) || 0.5,
       similarity_threshold: Number(el.simInput.value),
       title: el.titleInput.value || "吉他六線譜",
+      subtitle: el.subtitleInput.value || "",
       page_size: el.pageSizeInput.value,
       bw_enhance: !!el.bwInput.checked,
     };
