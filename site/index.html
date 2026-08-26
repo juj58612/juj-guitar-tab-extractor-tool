@@ -3,16 +3,22 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>juj 吉他影片六線譜自動擷取工具</title>
+<title>juj 影片樂譜擷取工具</title>
 <style>
   :root {
-    --bg: #f6f7f4;
+    --bg: #f6f7f6;
     --card: #ffffff;
-    --accent: #4a7c59;
-    --accent-dark: #375c41;
-    --text: #26301f;
-    --muted: #6b7264;
-    --border: #dfe3d8;
+    --text: #262b26;
+    --muted: #6b7268;
+    --border: #e0e3dd;
+    --guitar: #4a7c59;
+    --guitar-dark: #375c41;
+    --guitar-tint: #eef4ea;
+    --guitar-tint-border: #cfe0c6;
+    --piano: #3d5a99;
+    --piano-dark: #2d4478;
+    --piano-tint: #eaeef7;
+    --piano-tint-border: #c6d0e6;
   }
   * { box-sizing: border-box; }
   body {
@@ -21,7 +27,7 @@
     background: var(--bg);
     color: var(--text);
   }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 48px 20px 80px; }
+  .wrap { max-width: 800px; margin: 0 auto; padding: 48px 20px 80px; }
   h1 { font-size: 28px; margin-bottom: 4px; }
   .sub { color: var(--muted); margin-top: 0; margin-bottom: 32px; font-size: 15px; }
   .card {
@@ -31,8 +37,11 @@
     padding: 24px 28px;
     margin-bottom: 20px;
   }
-  .card h2 { margin-top: 0; font-size: 18px; }
+  .card h2 { margin-top: 0; font-size: 19px; }
   .card p { line-height: 1.7; color: var(--text); }
+  .tool-card { border-top: 4px solid var(--tool-color); }
+  .tool-card.guitar { --tool-color: var(--guitar); }
+  .tool-card.piano { --tool-color: var(--piano); }
   .downloads {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -48,7 +57,6 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    background: var(--accent);
     color: white;
     text-decoration: none;
     border-radius: 10px;
@@ -57,7 +65,10 @@
     font-weight: 600;
     transition: background 0.15s;
   }
-  .dl-btn:hover { background: var(--accent-dark); }
+  .guitar .dl-btn { background: var(--guitar); }
+  .guitar .dl-btn:hover { background: var(--guitar-dark); }
+  .piano .dl-btn { background: var(--piano); }
+  .piano .dl-btn:hover { background: var(--piano-dark); }
   .dl-btn .icon { font-size: 28px; }
   .dl-btn .size { font-size: 12px; font-weight: 400; opacity: 0.85; }
   .steps {
@@ -67,8 +78,8 @@
     color: var(--text);
   }
   .note {
-    background: #eef4ea;
-    border: 1px solid #cfe0c6;
+    background: var(--guitar-tint);
+    border: 1px solid var(--guitar-tint-border);
     border-radius: 8px;
     padding: 14px 18px;
     font-size: 14px;
@@ -81,25 +92,37 @@
     border-radius: 4px;
     font-size: 13px;
   }
+  .port-tag {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    margin-left: 6px;
+  }
+  .guitar .port-tag { background: var(--guitar-tint); color: var(--guitar-dark); border: 1px solid var(--guitar-tint-border); }
+  .piano .port-tag { background: var(--piano-tint); color: var(--piano-dark); border: 1px solid var(--piano-tint-border); }
   footer {
     text-align: center;
     color: var(--muted);
     font-size: 13px;
     margin-top: 40px;
+    line-height: 1.8;
   }
   footer a { color: var(--muted); }
 </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>🎸 juj 吉他影片六線譜自動擷取工具</h1>
-    <p class="sub">上傳吉他教學影片，自動去除重複畫面、擷取六線譜片段，依時間順序拼成完整樂譜 PDF。</p>
+    <h1>🎼 juj 影片樂譜擷取工具</h1>
+    <p class="sub">上傳教學影片，自動去除重複畫面、擷取譜面片段，依時間順序拼成完整樂譜 PDF。目前提供兩款工具，依你要練的樂器選擇下載：</p>
 
-    <div class="card">
-      <h2>下載到你自己的電腦上使用</h2>
+    <!-- 吉他 -->
+    <div class="card tool-card guitar">
+      <h2>🎸 吉他六線譜自動擷取工具 <span class="port-tag">本機連接埠 5001</span></h2>
       <p>
-        這個網頁本身不處理影片——影片分析與 PDF 產生都是在<strong>你自己的電腦</strong>上執行，
-        影片內容完全不會離開你的裝置。下載並解壓縮後，依照你的作業系統點擊對應的啟動檔即可。
+        上傳吉他教學影片，自動辨識六線譜(Tab)片段、去除重複畫面，拼成完整樂譜 PDF。
+        影片分析與 PDF 產生都在<strong>你自己的電腦</strong>上執行，影片內容完全不會離開你的裝置。
       </p>
       <div class="downloads">
         <a class="dl-btn" href="https://github.com/juj58612/juj-guitar-tab-extractor-tool/releases/download/v1.0/guitar_tab_extractor_win.zip">
@@ -115,26 +138,47 @@
       </div>
     </div>
 
+    <!-- 鋼琴 -->
+    <div class="card tool-card piano">
+      <h2>🎹 鋼琴五線譜自動擷取工具 <span class="port-tag">本機連接埠 5002</span></h2>
+      <p>
+        上傳鋼琴教學影片，自動辨識五線譜片段、去除重複畫面，拼成完整樂譜 PDF。
+        跟吉他版架構相同、可以同時安裝，連接埠不同(5001 / 5002)不會互相衝突。
+      </p>
+      <div class="downloads">
+        <a class="dl-btn" href="https://github.com/juj58612/juj-guitar-tab-extractor-tool/releases/download/v1.0/piano_score_extractor_win.zip">
+          <span class="icon">🪟</span>
+          <span>下載 Windows 版</span>
+          <span class="size">piano_score_extractor_win.zip・約 15 MB</span>
+        </a>
+        <a class="dl-btn" href="https://github.com/juj58612/juj-guitar-tab-extractor-tool/releases/download/v1.0/piano_score_extractor_mac.zip">
+          <span class="icon">🍎</span>
+          <span>下載 Mac 版</span>
+          <span class="size">piano_score_extractor_mac.zip・約 15 MB</span>
+        </a>
+      </div>
+    </div>
+
     <div class="card">
-      <h2>安裝與使用步驟</h2>
+      <h2>安裝與使用步驟（兩款工具通用）</h2>
       <ol class="steps">
-        <li>下載對應版本的 zip 檔，解壓縮到你想要的資料夾。</li>
+        <li>下載對應版本、對應樂器的 zip 檔，解壓縮到你想要的資料夾（兩款工具可以各自解壓縮到不同資料夾，互不影響）。</li>
         <li>
-          第一次使用前需要先安裝 <strong>Python 3.9 以上版本</strong>（一次性，之後不用再裝）：
+          第一次使用前需要先安裝 <strong>Python 3.9 以上版本</strong>（一次性，兩款工具共用，之後不用再裝）：
           到 <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org/downloads</a> 下載安裝，
           Windows 使用者安裝時記得勾選「Add Python to PATH」。
         </li>
         <li>
-          啟動工具：Windows 雙擊 <code>start_windows.bat</code>；Mac 雙擊 <code>start_mac.command</code>
+          啟動工具：Windows 雙擊資料夾裡的 <code>start_windows.bat</code>；Mac 雙擊 <code>start_mac.command</code>
           （Mac 如果顯示「無法開啟，因為來自不明開發者」，在 Finder 對檔案按右鍵 →「打開」即可，只需做一次）。
         </li>
-        <li>第一次啟動會自動安裝所需套件，需要等待幾分鐘；之後每次啟動只需幾秒鐘，會自動打開瀏覽器到 <code>http://127.0.0.1:5001</code>。</li>
+        <li>第一次啟動會自動安裝所需套件，需要等待幾分鐘；之後每次啟動只需幾秒鐘，會自動打開瀏覽器（吉他版 <code>http://127.0.0.1:5001</code>，鋼琴版 <code>http://127.0.0.1:5002</code>）。</li>
         <li>上傳影片、確認譜面框選區域、按下開始，等待處理完成後下載 PDF 即可。</li>
       </ol>
     </div>
 
     <div class="note">
-      💡 這個下載版是完整的本機工具，包含「上傳影片」與「貼上影片網址下載」兩種模式；如果你想把它部署到自己有運算資源的伺服器上長期提供服務，解壓縮後的資料夾裡的 <code>README.md</code> 有完整的「部署到伺服器」說明。
+      💡 這兩個下載版都是完整的本機工具，包含「上傳影片」與「貼上影片網址下載」兩種模式；如果你想把它部署到自己有運算資源的伺服器上長期提供服務，解壓縮後的資料夾裡的 <code>README.md</code> 有完整的「部署到伺服器」說明。這個網頁本身只提供下載，不處理影片。
     </div>
 
     <footer>
