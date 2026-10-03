@@ -44,6 +44,7 @@ python app.py   # http://127.0.0.1:5001
 
 - 這個 repo 在兩台電腦上輪流維護：Mac（放在外接硬碟 `/Volumes/1T  01/`，路徑中有兩個空格，指令中要加引號），以及學校網域 163.20.0.X 的 Windows
 - 使用者平常用 GitHub Desktop 做 Commit／Push。開始改之前先 pull，改完要 push
+- **在 Windows 上開 session 時**：先跑 `git fetch` 檢查吉他、鋼琴兩個 repo 是否落後 GitHub，落後就提醒使用者在 GitHub Desktop 按 Fetch origin → Pull 再開始（使用者要求的提醒）
 - Chat／Cowork 時期的工作也是在這個資料夾裡做的
 
 ## 重要決策
