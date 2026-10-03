@@ -159,3 +159,71 @@ button:hover, .primary:hover { background: var(--accent-dark); }
   margin-top: 16px;
   white-space: pre-wrap;
 }
+
+/* 手動擷取模式：微調時間按鈕、擷取片段清單、放大檢視 */
+.seek-btns { justify-content: center; }
+.seek-btns .tab-btn { padding: 6px 14px; font-size: 14px; }
+.seek-btns .tab-btn:hover { background: var(--bg); }
+
+.mode-manual .auto-only { display: none !important; }
+
+#galleryWrap h3 { font-size: 15px; margin: 20px 0 10px; }
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.gallery-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+}
+.gallery-item img {
+  height: 70px;
+  max-width: 60%;
+  object-fit: contain;
+  border-radius: 4px;
+  background: white;
+  cursor: zoom-in;
+}
+.gallery-item .info { flex: 1; font-size: 14px; }
+.gallery-item .remove-btn {
+  background: #fdecea;
+  color: #9c2c26;
+  border: 1px solid #f5c2c0;
+  padding: 6px 12px;
+  font-size: 13px;
+  margin-right: 0;
+}
+.gallery-item .remove-btn:hover { background: #fad2d0; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+.modal-content {
+  max-width: 90vw;
+  max-height: 90vh;
+  object-fit: contain;
+  border-radius: 8px;
+  background: white;
+}
+.modal-close {
+  position: absolute;
+  top: 20px;
+  right: 30px;
+  color: #fff;
+  font-size: 40px;
+  cursor: pointer;
+}

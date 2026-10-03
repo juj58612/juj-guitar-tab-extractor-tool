@@ -8,6 +8,8 @@
     videoH: 0,
     cropBox: null, // {x,y,w,h} in ORIGINAL video pixel coords
     pollTimer: null,
+    mode: "auto", // "auto" 自動擷取 | "manual" 手動擷取
+    captures: [], // 手動模式擷取的片段 [{t, filename, url}]，依時間排序
   };
 
   var el = {
@@ -40,11 +42,26 @@
     strideInput: document.getElementById("strideInput"),
     simInput: document.getElementById("simInput"),
     simLabel: document.getElementById("simLabel"),
-    bwInput: document.getElementById("bwInput"),
-    bwPreviewBtn: document.getElementById("bwPreviewBtn"),
-    bwPreviewWrap: document.getElementById("bwPreviewWrap"),
-    bwPreviewImg: document.getElementById("bwPreviewImg"),
+    enhanceInput: document.getElementById("enhanceInput"),
+    enhancePreviewBtn: document.getElementById("enhancePreviewBtn"),
+    enhancePreviewWrap: document.getElementById("enhancePreviewWrap"),
+    enhancePreviewHint: document.getElementById("enhancePreviewHint"),
+    enhancePreviewImg: document.getElementById("enhancePreviewImg"),
     startBtn: document.getElementById("startBtn"),
+
+    wrap: document.querySelector(".wrap"),
+    modeAuto: document.getElementById("modeAuto"),
+    modeManual: document.getElementById("modeManual"),
+    hintAuto: document.getElementById("hintAuto"),
+    hintManual: document.getElementById("hintManual"),
+    manualPanel: document.getElementById("manualPanel"),
+    captureBtn: document.getElementById("captureBtn"),
+    galleryWrap: document.getElementById("galleryWrap"),
+    galleryCount: document.getElementById("galleryCount"),
+    gallery: document.getElementById("gallery"),
+    imageModal: document.getElementById("imageModal"),
+    imageModalClose: document.getElementById("imageModalClose"),
+    modalImg: document.getElementById("modalImg"),
 
     progressBar: document.getElementById("progressBar"),
     progressMsg: document.getElementById("progressMsg"),
@@ -182,9 +199,9 @@
     state.cropBox = data.suggested_crop;
 
     el.uploadStatus.textContent = "已就緒！影片長度約 " + Math.round(data.duration) + " 秒。";
-    el.previewSeek.max = Math.max(1, Math.round(data.duration));
-    el.previewSeek.value = Math.round(data.duration * 0.4);
-    el.previewSeekLabel.textContent = el.previewSeek.value + " 秒";
+    el.previewSeek.max = Math.max(1, Math.floor(data.duration * 10) / 10);
+    el.previewSeek.value = Math.round(data.duration * 4) / 10;
+    updateSeekLabel();
 
     loadPreviewImage(data.preview_url + "?v=1");
     el.stepCrop.classList.remove("hidden");
@@ -215,6 +232,12 @@
 
   function uploadFile(file) {
     clearError();
+    // 先在瀏覽器擋掉明顯不是影片的檔案，省得把整個檔案上傳完才被伺服器拒絕。
+    // 有些影片格式 (例如 .mkv) 瀏覽器認不出類型、file.type 是空字串，這種交給伺服器判斷。
+    if (file.type && file.type.indexOf("video/") !== 0) {
+      showError("請上傳影片檔 (例如 mp4 / mov / mkv)，不支援這個檔案：" + file.name);
+      return;
+    }
     el.uploadStatus.textContent = "上傳並分析影片中，請稍候...(大檔案可能需要一點時間)";
     var fd = new FormData();
     fd.append("video", file);
@@ -314,21 +337,146 @@
 
   function clamp(v, min, max) { return Math.max(min, Math.min(max, v)); }
 
-  el.previewSeek.addEventListener("input", function () {
-    el.previewSeekLabel.textContent = el.previewSeek.value + " 秒";
-  });
-  el.previewSeek.addEventListener("change", function () {
+  // ---------------- 時間軸 / 微調按鈕 ----------------
+  // 拖曳時間軸或按 ±秒按鈕時，停下來 0.3 秒才去抓新畫面，避免連續送出一堆請求
+
+  var seekDebounce = null;
+
+  function currentT() { return Number(el.previewSeek.value); }
+
+  function updateSeekLabel() {
+    el.previewSeekLabel.textContent = currentT().toFixed(1) + " 秒";
+  }
+
+  function schedulePreview() {
+    updateSeekLabel();
+    if (seekDebounce) clearTimeout(seekDebounce);
+    seekDebounce = setTimeout(fetchPreviewAt, 300);
+  }
+
+  function fetchPreviewAt() {
     if (!state.jobId) return;
     fetch("/api/preview_at", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ job_id: state.jobId, t: Number(el.previewSeek.value) }),
+      body: JSON.stringify({ job_id: state.jobId, t: currentT() }),
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
         if (data.error) { showError(data.error); return; }
         loadPreviewImage(data.preview_url);
+      })
+      .catch(function (e) { showError(String(e)); });
+  }
+
+  el.previewSeek.addEventListener("input", schedulePreview);
+
+  document.querySelectorAll("[data-seek]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (!state.jobId) return;
+      var next = clamp(currentT() + Number(btn.getAttribute("data-seek")), 0, Number(el.previewSeek.max));
+      el.previewSeek.value = Math.round(next * 10) / 10;
+      schedulePreview();
+    });
+  });
+
+  function roundedCropBox() {
+    return {
+      x: Math.round(state.cropBox.x),
+      y: Math.round(state.cropBox.y),
+      w: Math.round(state.cropBox.w),
+      h: Math.round(state.cropBox.h),
+    };
+  }
+
+  // ---------------- 自動 / 手動 模式切換 ----------------
+
+  function setMode(mode) {
+    state.mode = mode;
+    var manual = mode === "manual";
+    el.modeAuto.classList.toggle("active", !manual);
+    el.modeManual.classList.toggle("active", manual);
+    el.hintAuto.classList.toggle("hidden", manual);
+    el.hintManual.classList.toggle("hidden", !manual);
+    el.manualPanel.classList.toggle("hidden", !manual);
+    el.wrap.classList.toggle("mode-manual", manual);
+    el.startBtn.textContent = manual ? "🚀 用擷取的片段產生樂譜 PDF" : "🚀 開始自動產生樂譜";
+  }
+
+  el.modeAuto.addEventListener("click", function () { setMode("auto"); });
+  el.modeManual.addEventListener("click", function () { setMode("manual"); });
+
+  // ---------------- 手動擷取 ----------------
+
+  el.captureBtn.addEventListener("click", function () {
+    clearError();
+    if (!state.jobId || !state.cropBox) { showError("請先上傳影片並確認框選區域"); return; }
+    el.captureBtn.disabled = true;
+    el.captureBtn.textContent = "擷取中...";
+
+    fetch("/api/capture", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ job_id: state.jobId, t: currentT(), crop_box: roundedCropBox() }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) { showError(data.error); return; }
+        state.captures.push({ t: data.t, filename: data.filename, url: data.url });
+        state.captures.sort(function (a, b) { return a.t - b.t; });
+        renderGallery();
+      })
+      .catch(function (e) { showError(String(e)); })
+      .then(function () {
+        el.captureBtn.disabled = false;
+        el.captureBtn.textContent = "📸 擷取當前畫面";
       });
+  });
+
+  function renderGallery() {
+    el.gallery.innerHTML = "";
+    el.galleryCount.textContent = state.captures.length;
+    el.galleryWrap.classList.toggle("hidden", state.captures.length === 0);
+
+    state.captures.forEach(function (item, idx) {
+      var div = document.createElement("div");
+      div.className = "gallery-item";
+
+      var img = document.createElement("img");
+      img.src = item.url;
+      img.alt = "片段 " + (idx + 1);
+      img.addEventListener("click", function () {
+        el.modalImg.src = item.url;
+        el.imageModal.classList.remove("hidden");
+      });
+
+      var info = document.createElement("div");
+      info.className = "info";
+      info.textContent = "片段 " + (idx + 1) + "（" + item.t.toFixed(1) + " 秒）";
+
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "remove-btn";
+      btn.textContent = "移除";
+      btn.addEventListener("click", function () {
+        state.captures.splice(idx, 1);
+        renderGallery();
+      });
+
+      div.appendChild(img);
+      div.appendChild(info);
+      div.appendChild(btn);
+      el.gallery.appendChild(div);
+    });
+  }
+
+  function closeModal() { el.imageModal.classList.add("hidden"); }
+  el.imageModalClose.addEventListener("click", closeModal);
+  el.imageModal.addEventListener("click", function (e) {
+    if (e.target === el.imageModal) closeModal();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") closeModal();
   });
 
   // ---------------- Params ----------------
@@ -337,56 +485,57 @@
     el.simLabel.textContent = el.simInput.value;
   });
 
-  el.bwPreviewBtn.addEventListener("click", function () {
+  var ENHANCE_HINTS = {
+    none: "這是目前框選區域的原始截圖 (不做畫質處理)：",
+    smart: "這是目前框選區域套用「智慧畫質增強」後的樣子：",
+    bw: "這是目前框選區域套用「黑白清晰化」後的樣子：",
+  };
+  var ENHANCE_PREVIEW_LABEL = "👀 預覽畫質處理效果";
+
+  el.enhancePreviewBtn.addEventListener("click", function () {
+    clearError();
     if (!state.jobId || !state.cropBox) { showError("請先上傳影片並確認框選區域"); return; }
-    el.bwPreviewBtn.disabled = true;
-    el.bwPreviewBtn.textContent = "產生中...";
-    fetch("/api/preview_bw", {
+    var mode = el.enhanceInput.value;
+    el.enhancePreviewBtn.disabled = true;
+    el.enhancePreviewBtn.textContent = "產生中...";
+    fetch("/api/preview_enhance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        job_id: state.jobId,
-        crop_box: {
-          x: Math.round(state.cropBox.x),
-          y: Math.round(state.cropBox.y),
-          w: Math.round(state.cropBox.w),
-          h: Math.round(state.cropBox.h),
-        },
-      }),
+      body: JSON.stringify({ job_id: state.jobId, crop_box: roundedCropBox(), t: currentT(), enhance: mode }),
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        el.bwPreviewBtn.disabled = false;
-        el.bwPreviewBtn.textContent = "👀 先看看黑白效果";
         if (data.error) { showError(data.error); return; }
-        el.bwPreviewImg.src = data.preview_bw_url;
-        el.bwPreviewWrap.classList.remove("hidden");
+        el.enhancePreviewHint.textContent = ENHANCE_HINTS[mode];
+        el.enhancePreviewImg.src = data.preview_url;
+        el.enhancePreviewWrap.classList.remove("hidden");
       })
-      .catch(function (e) {
-        el.bwPreviewBtn.disabled = false;
-        el.bwPreviewBtn.textContent = "👀 先看看黑白效果";
-        showError(String(e));
+      .catch(function (e) { showError(String(e)); })
+      .then(function () {
+        el.enhancePreviewBtn.disabled = false;
+        el.enhancePreviewBtn.textContent = ENHANCE_PREVIEW_LABEL;
       });
+  });
+
+  // 換了處理方式，舊的預覽就不準了，先收起來
+  el.enhanceInput.addEventListener("change", function () {
+    el.enhancePreviewWrap.classList.add("hidden");
   });
 
   el.startBtn.addEventListener("click", function () {
     clearError();
     if (!state.jobId || !state.cropBox) { showError("請先上傳影片並確認框選區域"); return; }
+    if (state.mode === "manual") { buildManual(); return; }
 
     var payload = {
       job_id: state.jobId,
-      crop_box: {
-        x: Math.round(state.cropBox.x),
-        y: Math.round(state.cropBox.y),
-        w: Math.round(state.cropBox.w),
-        h: Math.round(state.cropBox.h),
-      },
+      crop_box: roundedCropBox(),
       stride_sec: Number(el.strideInput.value) || 0.5,
       similarity_threshold: Number(el.simInput.value),
       title: el.titleInput.value || "吉他六線譜",
       subtitle: el.subtitleInput.value || "",
       page_size: el.pageSizeInput.value,
-      bw_enhance: !!el.bwInput.checked,
+      enhance: el.enhanceInput.value,
     };
 
     fetch("/api/process", {
@@ -404,6 +553,47 @@
       })
       .catch(function (e) { showError(String(e)); });
   });
+
+  function buildManual() {
+    if (!state.captures.length) { showError("還沒有擷取任何畫面，請先按「📸 擷取當前畫面」"); return; }
+    el.startBtn.disabled = true;
+    el.stepResult.classList.add("hidden");
+    el.stepProgressTitle.textContent = "產生樂譜 PDF 中...";
+    el.progressBar.style.width = "50%";
+    el.progressMsg.textContent = "共 " + state.captures.length + " 張片段";
+    el.stepProgress.classList.remove("hidden");
+
+    fetch("/api/build_manual", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        job_id: state.jobId,
+        captures: state.captures.map(function (c) { return { t: c.t, filename: c.filename }; }),
+        title: el.titleInput.value || "吉他六線譜",
+        subtitle: el.subtitleInput.value || "",
+        page_size: el.pageSizeInput.value,
+        enhance: el.enhanceInput.value,
+      }),
+    })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        el.stepProgress.classList.add("hidden");
+        if (data.error) { showError(data.error); return; }
+        showResult("共 " + data.kept_count + " 張手動擷取的譜面片段，已依時間順序拼成 PDF。", data.pdf_url);
+      })
+      .catch(function (e) {
+        el.stepProgress.classList.add("hidden");
+        showError(String(e));
+      })
+      .then(function () { el.startBtn.disabled = false; });
+  }
+
+  function showResult(summary, pdfUrl) {
+    el.stepResult.classList.remove("hidden");
+    el.resultSummary.textContent = summary;
+    // 加上時間戳，避免重新產生後瀏覽器拿到快取的舊 PDF
+    el.downloadBtn.href = pdfUrl + "?v=" + Date.now();
+  }
 
   // ---------------- Progress polling ----------------
 
@@ -425,10 +615,7 @@
         if (data.status === "done") {
           clearInterval(state.pollTimer);
           el.stepProgress.classList.add("hidden");
-          el.stepResult.classList.remove("hidden");
-          el.resultSummary.textContent =
-            "共擷取到 " + data.kept_count + " 張不重複的譜面片段，已依時間順序拼成 PDF。";
-          el.downloadBtn.href = data.pdf_url;
+          showResult("共擷取到 " + data.kept_count + " 張不重複的譜面片段，已依時間順序拼成 PDF。", data.pdf_url);
         } else if (data.status === "error") {
           clearInterval(state.pollTimer);
           showError(data.error);

@@ -38,6 +38,11 @@ COOKIE_NAME = "gte_access_code"
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 4 * 1024 * 1024 * 1024  # 4GB 上限
 
+VIDEO_EXTS = {
+    ".mp4", ".m4v", ".mov", ".avi", ".mkv", ".webm", ".flv", ".wmv",
+    ".ts", ".mts", ".m2ts", ".mpg", ".mpeg", ".3gp",
+}
+
 JOBS = {}  # job_id -> dict(status, progress, message, result, error, video_path, ...)
 JOBS_LOCK = threading.Lock()
 
@@ -127,9 +132,13 @@ def api_upload():
     if not f or not f.filename:
         return jsonify({"error": "沒有收到影片檔案"}), 400
 
+    # 先擋掉明顯不是影片的檔案 (例如誤選了 PDF/圖片)，不然要到 OpenCV 讀檔時才會失敗
+    ext = os.path.splitext(f.filename)[1].lower()
+    if ext not in VIDEO_EXTS:
+        return jsonify({"error": "不支援的檔案格式「{}」，請上傳影片檔 (例如 mp4 / mov / mkv)".format(ext or f.filename)}), 400
+
     job_id = uuid.uuid4().hex[:12]
     d = job_dir(job_id)
-    ext = os.path.splitext(f.filename)[1] or ".mp4"
     video_path = os.path.join(d, "source" + ext)
     f.save(video_path)
 
@@ -240,16 +249,18 @@ def api_preview_at():
     return jsonify({"preview_url": url_for("api_preview_image", job_id=job_id) + "?t=" + str(t)})
 
 
-@app.route("/api/preview_bw", methods=["POST"])
-def api_preview_bw():
+@app.route("/api/preview_enhance", methods=["POST"])
+def api_preview_enhance():
     """
-    黑白清晰化的「先看再決定」預覽：只針對目前框選的區域產生一張黑白版本讓使用者
-    看效果，不會套用到整份輸出。上一版黑白化因為效果不好被整個撤回過，這次改成
-    先給預覽、使用者自己勾選確定要套用了，才會在正式產生樂譜時套用到全部段落。
+    畫質處理的「先看再決定」預覽：只針對目前時間點、目前框選的區域，套用使用者
+    選的處理方式 (智慧畫質增強 / 黑白清晰化) 產生一張預覽，不會影響正式輸出。
     """
     data = request.get_json(force=True)
     job_id = data.get("job_id")
     crop_box = data.get("crop_box")
+    mode = data.get("enhance", "smart")
+    if mode not in pipeline.ENHANCE_MODES:
+        return jsonify({"error": "不支援的畫質處理方式"}), 400
     with JOBS_LOCK:
         job = JOBS.get(job_id)
     if not job or "video_path" not in job:
@@ -264,25 +275,119 @@ def api_preview_bw():
 
     try:
         crop = pipeline._crop(img, crop_box)
-        enhanced = pipeline.enhance_for_print(crop)
+        enhanced = pipeline.apply_enhance(crop, mode)
     except Exception as e:
-        return jsonify({"error": "產生黑白預覽失敗：{}".format(e)}), 400
+        return jsonify({"error": "產生預覽失敗：{}".format(e)}), 400
 
     d = job_dir(job_id)
-    p = os.path.join(d, "preview_bw.jpg")
+    p = os.path.join(d, "preview_enhance.jpg")
     enhanced.save(p, quality=92)
     return jsonify({
-        "preview_bw_url": url_for("api_preview_bw_image", job_id=job_id) + "?t=" + str(t)
+        "preview_url": url_for("api_preview_enhance_image", job_id=job_id) + "?t=" + str(t) + "&m=" + mode
     })
 
 
-@app.route("/api/preview_bw_image/<job_id>")
-def api_preview_bw_image(job_id):
+@app.route("/api/preview_enhance_image/<job_id>")
+def api_preview_enhance_image(job_id):
     d = job_dir(job_id)
-    p = os.path.join(d, "preview_bw.jpg")
+    p = os.path.join(d, "preview_enhance.jpg")
     if not os.path.exists(p):
-        return jsonify({"error": "尚未產生黑白預覽"}), 404
+        return jsonify({"error": "尚未產生預覽"}), 404
     return send_file(p, mimetype="image/jpeg")
+
+
+# ---------------------------------------------------------------------------
+# 手動模式：使用者自己拖時間軸、一張張擷取想要的畫面
+# (構想來自 will095614/sheetthief)
+# ---------------------------------------------------------------------------
+
+@app.route("/api/capture", methods=["POST"])
+def api_capture():
+    data = request.get_json(force=True)
+    job_id = data.get("job_id")
+    crop_box = data.get("crop_box")
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job or "video_path" not in job:
+        return jsonify({"error": "找不到工作"}), 404
+    if not crop_box:
+        return jsonify({"error": "缺少框選區域"}), 400
+
+    t = float(data.get("t", 0))
+    img = pipeline.grab_frame_at(job["video_path"], t)
+    if img is None:
+        return jsonify({"error": "抓取畫面失敗"}), 400
+
+    try:
+        crop = pipeline._crop(img, crop_box)
+    except Exception as e:
+        return jsonify({"error": "裁切畫面失敗：{}".format(e)}), 400
+
+    cap_dir = os.path.join(job_dir(job_id), "captures")
+    os.makedirs(cap_dir, exist_ok=True)
+    fname = "capture_t{:.1f}_{}.png".format(t, uuid.uuid4().hex[:6])
+    crop.save(os.path.join(cap_dir, fname))
+
+    return jsonify({
+        "filename": fname,
+        "t": t,
+        "url": url_for("api_capture_image", job_id=job_id, filename=fname),
+    })
+
+
+@app.route("/api/capture_image/<job_id>/<filename>")
+def api_capture_image(job_id, filename):
+    p = os.path.join(job_dir(job_id), "captures", os.path.basename(filename))
+    if not os.path.exists(p):
+        return jsonify({"error": "找不到檔案"}), 404
+    return send_file(p, mimetype="image/png")
+
+
+@app.route("/api/build_manual", methods=["POST"])
+def api_build_manual():
+    """把手動擷取的畫面 (依前端傳來的順序) 套用畫質處理後拼成 PDF"""
+    data = request.get_json(force=True)
+    job_id = data.get("job_id")
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job or "video_path" not in job:
+        return jsonify({"error": "找不到工作，請重新上傳影片或重新輸入網址"}), 404
+
+    enhance = data.get("enhance", "none")
+    if enhance not in pipeline.ENHANCE_MODES:
+        return jsonify({"error": "不支援的畫質處理方式"}), 400
+
+    cap_dir = os.path.join(job_dir(job_id), "captures")
+    captures = []
+    for item in data.get("captures") or []:
+        p = os.path.join(cap_dir, os.path.basename(str(item.get("filename", ""))))
+        if os.path.exists(p):
+            captures.append({"t": float(item.get("t", 0)), "path": p})
+    if not captures:
+        return jsonify({"error": "還沒有擷取任何畫面，請先按「📸 擷取當前畫面」"}), 400
+
+    try:
+        result = pipeline.build_from_captures(
+            captures,
+            out_dir=job_dir(job_id),
+            title=data.get("title") or "吉他六線譜",
+            subtitle=(data.get("subtitle") or "").strip(),
+            page_size=data.get("page_size") or "A4",
+            enhance=enhance,
+        )
+    except Exception as e:
+        traceback.print_exc()
+        return jsonify({"error": "產生 PDF 失敗：{}".format(e)}), 500
+
+    with JOBS_LOCK:
+        job["status"] = "done"
+        job["progress"] = 100
+        job["result"] = result
+
+    return jsonify({
+        "kept_count": result["kept_count"],
+        "pdf_url": url_for("api_download_pdf", job_id=job_id),
+    })
 
 
 def _run_job(job_id, params):
@@ -308,7 +413,7 @@ def _run_job(job_id, params):
             title=params["title"],
             subtitle=params.get("subtitle", ""),
             page_size=params["page_size"],
-            bw_enhance=params.get("bw_enhance", False),
+            enhance=params.get("enhance", "none"),
             progress_cb=progress_cb,
         )
 
@@ -337,6 +442,10 @@ def api_process():
     if not crop_box:
         return jsonify({"error": "缺少框選區域"}), 400
 
+    enhance = data.get("enhance", "none")
+    if enhance not in pipeline.ENHANCE_MODES:
+        return jsonify({"error": "不支援的畫質處理方式"}), 400
+
     params = {
         "crop_box": crop_box,
         "stride_sec": float(data.get("stride_sec", 0.5)),
@@ -345,7 +454,7 @@ def api_process():
         "title": data.get("title") or "吉他六線譜",
         "subtitle": (data.get("subtitle") or "").strip(),
         "page_size": data.get("page_size") or "A4",
-        "bw_enhance": bool(data.get("bw_enhance", False)),
+        "enhance": enhance,
     }
 
     with JOBS_LOCK:
@@ -403,8 +512,11 @@ def api_download_pdf(job_id):
 
 @app.route("/api/download/<job_id>/section/<filename>")
 def api_download_section(job_id, filename):
-    d = job_dir(job_id)
-    p = os.path.join(d, "crops", filename)
+    with JOBS_LOCK:
+        job = JOBS.get(job_id)
+    if not job or job.get("status") != "done":
+        return jsonify({"error": "尚未完成"}), 404
+    p = os.path.join(job["result"]["crops_dir"], os.path.basename(filename))
     if not os.path.exists(p):
         return jsonify({"error": "找不到檔案"}), 404
     return send_file(p, mimetype="image/png")

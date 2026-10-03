@@ -10,12 +10,15 @@
 4. 用二值化內容遮罩比對「畫面內容是否改變」，把同一份譜面(即使畫面上有會移動的
    高亮提示框)合併成一段，每段取一張代表圖(邊緣密度最高的那張，通常最清晰)
 5. 再次用內容遮罩比對，濾掉「跨時間重複」出現的譜面(同一段落被重複播放/講解)
-6. 依時間序把剩下的獨立譜面圖片，黑白清晰化後直向拼接成 A4/Letter 頁面，輸出成 PDF
+6. 依時間序把剩下的獨立譜面圖片，(依使用者選擇做畫質處理後) 直向拼接成 A4/Letter 頁面，輸出成 PDF
+
+另有手動模式 (build_from_captures)：跳過 1~5，直接用使用者自己擷取的畫面組 PDF。
 """
 
 import os
 import io
 import json
+import shutil
 import time
 import traceback
 
@@ -248,6 +251,44 @@ def enhance_for_print(pil_img, scale=2):
     return Image.fromarray(bw).convert("RGB")
 
 
+def enhance_quality(pil_img, scale=2):
+    """
+    智慧畫質增強 (白得更白、黑得更黑但不失真)，跟 enhance_for_print 的純黑白不同，
+    這個保留灰階過渡，比較不會有二值化的鋸齒感：
+    1. 轉灰階後放大，保留細節
+    2. 取亮度分佈的 3% / 95% 百分位數，做對比度拉伸，把背景拉到純白、
+       線條拉到更深的黑，中間顏色線性過渡
+    3. 輕微銳化 (unsharp mask)
+    (改寫自 will095614/sheetthief 的版本)
+    """
+    w, h = pil_img.size
+    gray = pil_img.convert("L")
+    # 百分位數用「放大前」的圖算：LANCZOS 放大會在深色線條旁產生一圈比背景還亮的
+    # 振鈴 (ringing)，用放大後的圖算會把 95% 亮度墊高，背景就拉不到純白
+    p_low, p_high = np.percentile(np.array(gray), (3, 95))
+    arr = np.array(gray.resize((w * scale, h * scale), Image.LANCZOS))
+
+    if p_high > p_low:
+        arr = np.clip((arr.astype(np.float32) - p_low) * 255.0 / (p_high - p_low), 0, 255).astype(np.uint8)
+
+    blurred = cv2.GaussianBlur(arr, (0, 0), 1.0)
+    arr = cv2.addWeighted(arr, 1.2, blurred, -0.2, 0)
+
+    return Image.fromarray(arr).convert("RGB")
+
+
+ENHANCE_MODES = ("none", "smart", "bw")
+
+
+def apply_enhance(pil_img, mode):
+    """依使用者選的畫質處理方式處理圖片：none=原圖、smart=智慧畫質增強、bw=黑白清晰化"""
+    if mode == "smart":
+        return enhance_quality(pil_img)
+    if mode == "bw":
+        return enhance_for_print(pil_img)
+    return pil_img
+
+
 def process_video(
     path,
     crop_box,
@@ -258,7 +299,7 @@ def process_video(
     title="吉他六線譜",
     subtitle="",
     page_size="A4",
-    bw_enhance=False,
+    enhance="none",
     progress_cb=None,
 ):
     """
@@ -398,11 +439,10 @@ def process_video(
             kept_sigs.append(sig)
 
     # --- 5. 存檔 + 拼成 PDF -------------------------------------------------------
-    report(88, "產生樂譜檔案中..." if not bw_enhance else "黑白清晰化處理中...")
+    report(88, "產生樂譜檔案中..." if enhance == "none" else "畫質處理中...")
     sections = []
     for i, (t, crop) in enumerate(kept):
-        if bw_enhance:
-            crop = enhance_for_print(crop)
+        crop = apply_enhance(crop, enhance)
         fname = "section_{:03d}_t{:.0f}s.png".format(i + 1, t)
         fpath = os.path.join(crops_dir, fname)
         crop.save(fpath)
@@ -416,6 +456,38 @@ def process_video(
         "pdf_path": pdf_path,
         "crops_dir": crops_dir,
         "kept_count": len(kept),
+        "sections": sections,
+    }
+
+
+def build_from_captures(captures, out_dir, title="吉他六線譜", subtitle="", page_size="A4", enhance="none"):
+    """
+    手動模式：使用者自己在時間軸上一張張擷取的畫面 (captures: [{t, path}]，已依
+    想要的順序排好)，套用畫質處理後拼成 PDF。回傳格式與 process_video 相同。
+    原始擷取檔保留不動，處理後的圖另存到 manual_out/，方便使用者換一種畫質處理
+    方式重新產生。
+    """
+    if not captures:
+        raise RuntimeError("還沒有擷取任何畫面")
+
+    sections_dir = os.path.join(out_dir, "manual_out")
+    shutil.rmtree(sections_dir, ignore_errors=True)
+    os.makedirs(sections_dir)
+
+    sections = []
+    for i, c in enumerate(captures):
+        img = apply_enhance(Image.open(c["path"]).convert("RGB"), enhance)
+        fname = "section_{:03d}_t{:.0f}s.png".format(i + 1, c["t"])
+        fpath = os.path.join(sections_dir, fname)
+        img.save(fpath)
+        sections.append({"t": c["t"], "path": fpath, "filename": fname})
+
+    pdf_path = os.path.join(out_dir, "guitar_tab_score.pdf")
+    build_pdf([s["path"] for s in sections], pdf_path, title=title, subtitle=subtitle, page_size=page_size)
+    return {
+        "pdf_path": pdf_path,
+        "crops_dir": sections_dir,
+        "kept_count": len(sections),
         "sections": sections,
     }
 
