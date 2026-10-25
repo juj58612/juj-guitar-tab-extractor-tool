@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>juj 影片樂譜擷取工具</title>
+<title>juj 樂譜自動擷取工具</title>
 <style>
   :root {
     --bg: #f6f7f6;
@@ -94,6 +94,7 @@
   }
   .updated { font-size: 13px; color: var(--muted); margin: -4px 0 0; }
   .steps ul { padding-left: 20px; margin: 4px 0; }
+  .warn { background:#fff6e0; border:1px solid #ecd28a; color:#6b4e00; border-radius:8px; padding:10px 14px; font-size:14px; margin:-16px 0 24px; }
   .port-tag {
     display: inline-block;
     font-size: 12px;
@@ -116,19 +117,21 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>🎼 juj 影片樂譜擷取工具</h1>
-    <p class="sub">上傳教學影片，自動去除重複畫面、擷取譜面片段，依時間順序拼成完整樂譜 PDF。目前提供兩款工具，依你要練的樂器選擇下載：</p>
+    <h1>🎼 juj 樂譜自動擷取工具（吉他譜／鋼琴譜）</h1>
+    <p class="sub">上傳教學影片，自動擷取譜面、去除重複，預覽確認後緊密排版成 PDF。吉他譜、鋼琴譜都適用，使用時在網頁上選擇要擷取哪一種。</p>
+    <div class="warn">⚠️ 擷取出的樂譜建議只留作自己練習用，不要再轉傳，也不要販售；需要購買請與原曲譜製作者聯絡。</div>
 
     <!-- 吉他 -->
     <div class="card tool-card guitar">
-      <h2>🎸 吉他六線譜自動擷取工具 <span class="port-tag">本機連接埠 5001</span></h2>
+      <h2>🎸🎹 樂譜自動擷取工具 <span class="port-tag">本機連接埠 5001</span></h2>
       <p>
-        上傳吉他教學影片，程式會自動掃描、把譜切成一行一行（和弦圖＋五線譜＋六線譜，含歌詞），
-        清掉播放提示框與游標、去除捲動造成的重複，預覽確認後再緊密排版成 PDF，省紙又好讀。
-        整頁都是譜的影片、譜只在畫面下方的影片都能處理。
+        上傳教學影片前，先在網頁上選擇「吉他譜」或「鋼琴譜」：
+        吉他譜會切成「和弦圖＋五線譜＋六線譜（含歌詞）」一行一行；鋼琴譜會切成「和弦名稱＋高音譜表＋低音譜表」一行一行。
+        程式會清掉播放提示框與游標、去除捲動造成的重複，預覽確認後再緊密排版成 PDF，省紙又好讀。
+        整頁都是譜的影片、譜只在畫面上方或下方的影片都能處理。
         影片分析與 PDF 產生都在<strong>你自己的電腦</strong>上執行，影片內容完全不會離開你的裝置。
       </p>
-      <p class="updated">🆕 2026-10-25 更新：逐行切譜、支援下方譜卡與歌詞、排版預覽、Windows 中文路徑修正。</p>
+      <p class="updated">🆕 2026-10-25 更新：加入鋼琴譜、逐行切譜、支援譜卡影片與歌詞、排版預覽、Windows 中文路徑修正。</p>
       <div class="downloads">
         <a class="dl-btn" href="https://github.com/juj58612/juj-guitar-tab-extractor-tool/releases/download/v1.0/guitar_tab_extractor_win.zip">
           <span class="icon">🪟</span>
@@ -143,34 +146,12 @@
       </div>
     </div>
 
-    <!-- 鋼琴 -->
-    <div class="card tool-card piano">
-      <h2>🎹 鋼琴五線譜自動擷取工具 <span class="port-tag">本機連接埠 5002</span></h2>
-      <p>
-        上傳鋼琴教學影片，自動辨識五線譜片段、去除重複畫面，拼成完整樂譜 PDF。
-        跟吉他版架構相同、可以同時安裝，連接埠不同(5001 / 5002)不會互相衝突。
-      </p>
-      <p class="updated">ℹ️ 鋼琴版尚未加入吉他版的新功能（逐行切譜等），之後會合併成同一個工具。</p>
-      <div class="downloads">
-        <a class="dl-btn" href="https://github.com/juj58612/juj-guitar-tab-extractor-tool/releases/download/v1.0/piano_score_extractor_win.zip">
-          <span class="icon">🪟</span>
-          <span>下載 Windows 版</span>
-          <span class="size">piano_score_extractor_win.zip・約 15 MB</span>
-        </a>
-        <a class="dl-btn" href="https://github.com/juj58612/juj-guitar-tab-extractor-tool/releases/download/v1.0/piano_score_extractor_mac.zip">
-          <span class="icon">🍎</span>
-          <span>下載 Mac 版</span>
-          <span class="size">piano_score_extractor_mac.zip・約 15 MB</span>
-        </a>
-      </div>
-    </div>
-
     <div class="card">
-      <h2>安裝與使用步驟（兩款工具通用）</h2>
+      <h2>安裝與使用步驟</h2>
       <ol class="steps">
-        <li>下載對應版本、對應樂器的 zip 檔，解壓縮到你想要的資料夾（兩款工具可以各自解壓縮到不同資料夾，互不影響）。</li>
+        <li>下載對應電腦（Windows / Mac）的 zip 檔，解壓縮到你想要的資料夾。</li>
         <li>
-          第一次使用前需要先安裝 <strong>Python 3.9 以上版本</strong>（一次性，兩款工具共用，之後不用再裝）：
+          第一次使用前需要先安裝 <strong>Python 3.9 以上版本</strong>（一次性，之後不用再裝）：
           到 <a href="https://www.python.org/downloads/" target="_blank" rel="noopener">python.org/downloads</a> 下載安裝，
           Windows 使用者安裝時記得勾選「Add Python to PATH」。
         </li>
@@ -188,13 +169,13 @@
           </ul>
           只需要處理一次，之後雙擊就會直接啟動。
         </li>
-        <li>第一次啟動會自動安裝所需套件，需要等待幾分鐘；之後每次啟動只需幾秒鐘（吉他版 <code>http://127.0.0.1:5001</code>，鋼琴版 <code>http://127.0.0.1:5002</code>）。使用時請不要關掉啟動後出現的黑色視窗。</li>
-        <li>吉他版：上傳影片後會<strong>自動掃描擷取</strong>，在預覽區移除抓錯的行，選好紙張與譜的大小（可先預覽排版），再按「產生樂譜 PDF」下載。漏抓的地方可以用「手動補抓畫面」補上。</li>
+        <li>第一次啟動會自動安裝所需套件，需要等待幾分鐘；之後每次啟動只需幾秒鐘（<code>http://127.0.0.1:5001</code>）。使用時請不要關掉啟動後出現的黑色視窗。</li>
+        <li>先選「吉他譜」或「鋼琴譜」，上傳影片後會<strong>自動掃描擷取</strong>，在預覽區移除抓錯的行，選好紙張與譜的大小（可先預覽排版），再按「產生樂譜 PDF」下載。漏抓的地方可以用「手動補抓畫面」補上。</li>
       </ol>
     </div>
 
     <div class="note">
-      💡 這兩個下載版都是完整的本機工具，包含「上傳影片」與「貼上影片網址下載」兩種模式；如果你想把它部署到自己有運算資源的伺服器上長期提供服務，解壓縮後的資料夾裡的 <code>README.md</code> 有完整的「部署到伺服器」說明。這個網頁本身只提供下載，不處理影片。
+      💡 這個下載版是完整的本機工具，包含「上傳影片」與「貼上影片網址下載」兩種模式；如果你想把它部署到自己有運算資源的伺服器上長期提供服務，解壓縮後的資料夾裡的 <code>README.md</code> 有完整的「部署到伺服器」說明。這個網頁本身只提供下載，不處理影片。
     </div>
 
     <footer>

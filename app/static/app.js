@@ -9,6 +9,7 @@
     cropBox: null, // {x,y,w,h} in ORIGINAL video pixel coords
     pollTimer: null,
     mode: "auto", // "auto" 自動擷取 | "manual" 手動擷取
+    scoreType: "guitar", // "guitar" 吉他譜 | "piano" 鋼琴譜 (上傳前由使用者選擇)
     captures: [], // 手動模式擷取的片段 [{t, filename, url}]，依時間排序
   };
 
@@ -107,6 +108,46 @@
   el.titleInput.addEventListener("input", persistTitleFields);
   el.subtitleInput.addEventListener("input", persistTitleFields);
 
+  // ---------------- 吉他譜 / 鋼琴譜 選擇 ----------------
+  // 上傳前先讓使用者告訴程式要擷取哪一種譜：兩種譜「一行」的組成不同
+  // (吉他：五線譜+TAB；鋼琴：高音+低音譜表)，分開處理比自動猜更穩定。
+  var SCORE_TYPE_KEY = "score_extractor_type";
+  var DEFAULT_TITLES = { guitar: "吉他六線譜", piano: "鋼琴譜" };
+  var LINE_DESC = { guitar: "「和弦圖＋五線譜＋六線譜」", piano: "「和弦名稱＋高音譜表＋低音譜表」" };
+  var typeButtons = document.querySelectorAll(".type-btn");
+
+  function setScoreType(type, keepTitle) {
+    var prevDefault = DEFAULT_TITLES[state.scoreType];
+    state.scoreType = type === "piano" ? "piano" : "guitar";
+    typeButtons.forEach(function (b) {
+      b.classList.toggle("active", b.getAttribute("data-type") === state.scoreType);
+    });
+    // 標題還是上一種的預設值 (或空白) 時，換成這一種的預設標題
+    if (!keepTitle && (!el.titleInput.value || el.titleInput.value === prevDefault)) {
+      el.titleInput.value = DEFAULT_TITLES[state.scoreType];
+    }
+    var ld = document.getElementById("lineDesc");
+    if (ld) ld.textContent = LINE_DESC[state.scoreType];
+    try { window.localStorage.setItem(SCORE_TYPE_KEY, state.scoreType); } catch (e) {}
+  }
+
+  typeButtons.forEach(function (b) {
+    b.addEventListener("click", function () {
+      if (state.jobId) {
+        showError("已經上傳的影片會照原本選的種類處理；要改譜的種類，請按「處理另一部影片」重新上傳。");
+        return;
+      }
+      setScoreType(b.getAttribute("data-type"));
+    });
+  });
+
+  (function restoreScoreType() {
+    var saved = null;
+    try { saved = window.localStorage.getItem(SCORE_TYPE_KEY); } catch (e) {}
+    setScoreType(saved || "guitar", true);
+    if (!el.titleInput.value) el.titleInput.value = DEFAULT_TITLES[state.scoreType];
+  })();
+
   function showError(msg) {
     el.errorBox.textContent = "發生錯誤：" + msg;
     el.errorBox.classList.remove("hidden");
@@ -150,7 +191,7 @@
     fetch("/api/from_url", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: url }),
+      body: JSON.stringify({ url: url, score_type: state.scoreType }),
     })
       .then(function (r) { return r.json(); })
       .then(function (data) {
@@ -350,6 +391,7 @@
     el.uploadStatus.textContent = "上傳並分析影片中，請稍候...(大檔案可能需要一點時間)";
     var fd = new FormData();
     fd.append("video", file);
+    fd.append("score_type", state.scoreType);
 
     fetch("/api/upload", { method: "POST", body: fd })
       .then(function (r) { return r.json(); })
@@ -701,7 +743,7 @@
       body: JSON.stringify({
         job_id: state.jobId,
         captures: state.captures.map(function (c) { return { t: c.t, filename: c.filename, kind: c.kind || "line" }; }),
-        title: el.titleInput.value || "吉他六線譜",
+        title: el.titleInput.value || DEFAULT_TITLES[state.scoreType],
         subtitle: el.subtitleInput.value || "",
         page_size: el.pageSizeInput.value,
         scale: Number(el.scaleInput.value),
@@ -768,7 +810,7 @@
       body: JSON.stringify({
         job_id: state.jobId,
         captures: state.captures.map(function (c) { return { t: c.t, filename: c.filename, kind: c.kind || "line" }; }),
-        title: el.titleInput.value || "吉他六線譜",
+        title: el.titleInput.value || DEFAULT_TITLES[state.scoreType],
         subtitle: el.subtitleInput.value || "",
         page_size: el.pageSizeInput.value,
         enhance: el.enhanceInput.value,

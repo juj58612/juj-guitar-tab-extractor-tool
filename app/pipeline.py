@@ -105,7 +105,7 @@ def grab_frame_at(path, t_sec):
 # 自動建議譜面框選區域
 # ---------------------------------------------------------------------------
 
-def suggest_crop_box(path, duration, samples=10):
+def suggest_crop_box(path, duration, samples=10, score_type="guitar"):
     """
     抽樣數張畫面，找出「細節最豐富、最穩定」的水平帶狀區域，
     當作預設的譜面框選建議 (使用者仍可在介面上手動調整)。
@@ -113,6 +113,12 @@ def suggest_crop_box(path, duration, samples=10):
     """
     duration, width, height, fps = get_video_info(path)
     ts = [duration * (i + 1) / (samples + 1) for i in range(samples)]
+
+    if score_type == "piano":
+        box = _suggest_crop_by_staves(path, ts, width, height)
+        if box:
+            return box
+
     light_profiles = []
     for t in ts:
         img = grab_frame_at(path, t)
@@ -209,6 +215,32 @@ def suggest_crop_box(path, duration, samples=10):
     return {"x": 0, "y": int(y0), "w": int(width), "h": int(y1 - y0)}
 
 
+def _suggest_crop_by_staves(path, ts, width, height):
+    """
+    鋼琴譜：直接找「成組的五線譜」在畫面哪裡，用譜表的位置決定框選範圍。
+    (鋼琴教學影片下方常有虛擬鍵盤，白鍵是一大塊淺色區域，用「找淺色區塊」的
+    方法會框到鍵盤而不是譜。) 上方多留和弦名稱/小節號的空間，下方多留低音譜表
+    下加線音符的空間。找不到譜表時回傳 None，退回原本的做法。
+    """
+    tops, bots, sps = [], [], []
+    for t in ts:
+        img = grab_frame_at(path, t)
+        if img is None:
+            continue
+        systems, sp = _find_systems(clean_highlight(img), "piano")
+        for sy in systems:
+            if sy["nstaff"] >= 2:
+                tops.append(sy["top"])
+                bots.append(sy["bot"])
+                sps.append(sp)
+    if len(tops) < 2:
+        return None
+    sp = float(np.median(sps))
+    y0 = int(max(0, min(tops) - sp * 9))
+    y1 = int(min(height, max(bots) + sp * 7))
+    return {"x": 0, "y": y0, "w": int(width), "h": int(y1 - y0)}
+
+
 # ---------------------------------------------------------------------------
 # 主要流程
 # ---------------------------------------------------------------------------
@@ -236,7 +268,7 @@ def _otsu_threshold(values):
 SIG_WIDTH = 320  # 縮小後拿來比對內容是否相同的統一寬度 (高度依原比例)
 
 
-def _content_signature(pil_img):
+def _content_signature(pil_img, drop_lines=False):
     """
     把畫面轉成「墨跡遮罩」(哪些像素是黑色的線條/音符/數字)，用來判斷兩張截圖
     是不是「同一份譜面」。
@@ -254,6 +286,12 @@ def _content_signature(pil_img):
     sig_h = max(24, min(SIG_WIDTH, int(round(SIG_WIDTH * h / max(1, w)))))
     gray = np.array(pil_img.convert("L").resize((SIG_WIDTH, sig_h), Image.LANCZOS))
     _, ink = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    if drop_lines:
+        # 鋼琴譜：每一頁的五線譜位置幾乎一樣，譜線會佔掉大部分墨跡，讓「換頁」
+        # 看起來差異很小。把長橫線 (譜線) 拿掉，只比對音符、符號本身。
+        k = max(15, SIG_WIDTH // 8)
+        lines_ = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (k, 1)))
+        ink = cv2.subtract(ink, lines_)
     ink = cv2.dilate(ink, np.ones((3, 3), np.uint8))
     return ink > 0
 
@@ -392,6 +430,7 @@ def extract_sections(
     similarity_threshold=6,
     progress_cb=None,
     return_intro=False,
+    score_type="guitar",
 ):
     """
     自動擷取的「掃描抓譜」部分 (步驟 1~4)：掃過整部影片，找出每一份獨立的譜面、
@@ -501,7 +540,7 @@ def extract_sections(
         run, prev_sig = [], None
         intro_runs = []
         for t, crop, score in pre:
-            sig = _content_signature(crop)
+            sig = _content_signature(crop, drop_lines=(score_type == "piano"))
             if prev_sig is not None and _content_diff(sig, prev_sig) > 0.25:
                 intro_runs.append(run)
                 run = []
@@ -525,7 +564,7 @@ def extract_sections(
     cur_run = []
     cur_sig = None
     for t, crop, score in candidates:
-        sig = _content_signature(crop)
+        sig = _content_signature(crop, drop_lines=(score_type == "piano"))
         if cur_sig is None or _content_diff(sig, cur_sig) <= CONTENT_SAME_FRACTION:
             cur_run.append((t, crop, score))
         else:
@@ -717,7 +756,7 @@ def _find_staff_lines(gray):
     return ys
 
 
-def _find_systems(gray):
+def _find_systems(gray, score_type="guitar"):
     """
     把譜線分組成「譜表」(五線譜 5 條、TAB 6 條，偶爾被音符蓋住會少一兩條)，
     再把上下靠得很近的譜表 (五線譜 + 下面的 TAB) 組成一個 system (= 一行)。
@@ -746,8 +785,14 @@ def _find_systems(gray):
     for st in staffs[1:]:
         prev = systems[-1][-1]
         gap_ = st[0] - prev[-1]
-        pair_by_count = len(prev) <= 5 and len(st) >= 6 and len(systems[-1]) == 1 and gap_ <= sp * 16
-        if pair_by_count or gap_ <= sp * 8:
+        if score_type == "piano":
+            # 鋼琴大譜表：高音譜表 + 低音譜表 (兩組都是 5 條線) 配成一行。
+            # 兩個譜表之間可能有很多加線音符，距離比吉他譜的五線譜+TAB 稍遠也算。
+            pair = len(systems[-1]) == 1 and gap_ <= sp * 12
+        else:
+            pair_by_count = len(prev) <= 5 and len(st) >= 6 and len(systems[-1]) == 1 and gap_ <= sp * 16
+            pair = pair_by_count or gap_ <= sp * 8
+        if pair:
             systems[-1].append(st)
         else:
             systems.append([st])
@@ -794,8 +839,8 @@ def _follow_content(gray, start, direction, limit, gap):
     return last - 4 if direction < 0 else last + 5
 
 
-def _analyze_page(gray):
-    systems, sp = _find_systems(gray)
+def _analyze_page(gray, score_type="guitar"):
+    systems, sp = _find_systems(gray, score_type)
     blank = (gray < 200).sum(axis=1) <= 1
     cuts = [
         _best_blank_cut(blank, systems[i]["bot"] + sp, systems[i + 1]["top"] - sp)
@@ -834,7 +879,7 @@ def _remove_static_overlay(pages):
             g["gray"][mask] = 255
 
 
-def _line_signature(gray_line):
+def _line_signature(gray_line, drop_lines=False):
     """
     一行譜的內容簽章，用來判斷相鄰截圖之間是不是同一行 (捲動造成的重疊)。
     以譜線為基準對齊、只取「譜表本體」(第一條譜線上方一點 ~ 最後一條譜線下方一點)：
@@ -852,11 +897,14 @@ def _line_signature(gray_line):
     sig_h = max(16, min(240, int(round(400.0 * h / max(1, w)))))
     small = cv2.resize(g, (400, sig_h), interpolation=cv2.INTER_AREA)
     ink = (small < 200).astype(np.uint8)
+    if drop_lines:
+        lines_ = cv2.morphologyEx(ink, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (50, 1)))
+        ink = cv2.subtract(ink, lines_)
     ink = cv2.dilate(ink, np.ones((3, 3), np.uint8))
     return ink > 0
 
 
-def split_pages_into_lines(pages_in, ext=None):
+def split_pages_into_lines(pages_in, ext=None, score_type="guitar"):
     """
     pages_in：[(t秒, PIL 整頁截圖), ...] 依時間排序。
     回傳 (lines, ext)：
@@ -871,7 +919,7 @@ def split_pages_into_lines(pages_in, ext=None):
     """
     pages = []
     for t, pil in pages_in:
-        pg = _analyze_page(clean_highlight(pil))
+        pg = _analyze_page(clean_highlight(pil), score_type)
         pg["t"] = t
         pages.append(pg)
 
@@ -898,7 +946,10 @@ def split_pages_into_lines(pages_in, ext=None):
         }
     measured_ext = bool(ext.get("measured"))
 
-    _remove_static_overlay(pages)
+    if score_type != "piano":
+        # 吉他譜：去掉錄影軟體之類固定位置的浮水印。鋼琴譜不做：鋼琴教學影片上
+        # 固定出現的文字常是譜的作者聲明 (例如請購買正版樂譜)，照影片原樣保留。
+        _remove_static_overlay(pages)
 
     raw = []  # (page_index, t, top, bot)
     for pi, pg in enumerate(pages):
@@ -962,7 +1013,8 @@ def split_pages_into_lines(pages_in, ext=None):
     items = []
     for pi, t, top, bot in raw:
         arr = pages[pi]["gray"][top:bot, x0:x1]
-        items.append({"pi": pi, "t": t, "top": top, "arr": arr, "sig": _line_signature(arr)})
+        items.append({"pi": pi, "t": t, "top": top, "arr": arr,
+                      "sig": _line_signature(arr, drop_lines=(score_type == "piano"))})
 
     def sig_diff(a, b):
         if a.shape != b.shape:

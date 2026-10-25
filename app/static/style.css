@@ -293,3 +293,15 @@ button:disabled { opacity: .55; cursor: default; }
 #step-review .gallery-item.kind-page img { max-height: 420px; object-fit: contain; }
 
 button { white-space: nowrap; }
+
+/* 使用警語 */
+.usage-warning {
+  background: #fff6e0; border: 1px solid #ecd28a; color: #6b4e00;
+  border-radius: 8px; padding: 10px 14px; font-size: 14px; margin: -8px 0 20px;
+}
+/* 吉他譜 / 鋼琴譜 選擇 */
+.score-type { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 14px; }
+.score-type-label { font-size: 14px; color: var(--muted); }
+.type-btn { background: #fff; color: var(--text); border: 1px solid var(--border); margin-right: 0; }
+.type-btn:hover { background: #eef4ea; }
+.type-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }

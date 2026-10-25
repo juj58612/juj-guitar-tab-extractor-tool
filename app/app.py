@@ -59,6 +59,14 @@ VIDEO_EXTS = {
     ".ts", ".mts", ".m2ts", ".mpg", ".mpeg", ".3gp",
 }
 
+SCORE_TYPES = ("guitar", "piano")
+DEFAULT_TITLES = {"guitar": "吉他六線譜", "piano": "鋼琴譜"}
+
+
+def _score_type(value):
+    return value if value in SCORE_TYPES else "guitar"
+
+
 JOBS = {}  # job_id -> dict(status, progress, message, result, error, video_path, ...)
 JOBS_LOCK = threading.Lock()
 
@@ -112,13 +120,13 @@ def index():
     return render_template("index.html")
 
 
-def _finish_preparing(job_id, video_path):
+def _finish_preparing(job_id, video_path, score_type="guitar"):
     """影片就緒後 (無論是上傳還是網址下載來的)，計算長度/預設框選/預覽圖"""
     d = job_dir(job_id)
     duration, width, height, fps = pipeline.get_video_info(video_path)
 
     try:
-        crop_box = pipeline.suggest_crop_box(video_path, duration)
+        crop_box = pipeline.suggest_crop_box(video_path, duration, score_type=score_type)
     except Exception:
         crop_box = {"x": 0, "y": int(height * 0.55), "w": width, "h": int(height * 0.42)}
 
@@ -158,11 +166,12 @@ def api_upload():
     video_path = os.path.join(d, "source" + ext)
     f.save(video_path)
 
+    score_type = _score_type(request.form.get("score_type"))
     with JOBS_LOCK:
-        JOBS[job_id] = {"status": "preparing", "progress": 0, "message": ""}
+        JOBS[job_id] = {"status": "preparing", "progress": 0, "message": "", "score_type": score_type}
 
     try:
-        _finish_preparing(job_id, video_path)
+        _finish_preparing(job_id, video_path, score_type)
     except Exception as e:
         shutil.rmtree(d, ignore_errors=True)
         with JOBS_LOCK:
@@ -182,7 +191,7 @@ def api_upload():
     })
 
 
-def _run_url_download(job_id, url):
+def _run_url_download(job_id, url, score_type="guitar"):
     d = job_dir(job_id)
 
     def progress_cb(pct, msg):
@@ -200,7 +209,7 @@ def _run_url_download(job_id, url):
             JOBS[job_id]["status"] = "preparing"
             JOBS[job_id]["message"] = "分析影片中..."
 
-        _finish_preparing(job_id, video_path)
+        _finish_preparing(job_id, video_path, score_type)
 
     except downloader.UnsafeURLError as e:
         with JOBS_LOCK:
@@ -227,10 +236,11 @@ def api_from_url():
 
     job_id = uuid.uuid4().hex[:12]
     job_dir(job_id)
+    score_type = _score_type(data.get("score_type"))
     with JOBS_LOCK:
-        JOBS[job_id] = {"status": "downloading", "progress": 0, "message": "準備下載..."}
+        JOBS[job_id] = {"status": "downloading", "progress": 0, "message": "準備下載...", "score_type": score_type}
 
-    th = threading.Thread(target=_run_url_download, args=(job_id, url), daemon=True)
+    th = threading.Thread(target=_run_url_download, args=(job_id, url, score_type), daemon=True)
     th.start()
 
     return jsonify({"job_id": job_id})
@@ -352,7 +362,8 @@ def api_capture():
     # 跟自動擷取一樣切成一行一行；切不出來 (例如和弦表、調弦設定畫面) 就整張保留
     with JOBS_LOCK:
         ext = job.get("line_ext")
-    lines, _ = pipeline.split_pages_into_lines([(t, crop)], ext=ext)
+        score_type = job.get("score_type", "guitar")
+    lines, _ = pipeline.split_pages_into_lines([(t, crop)], ext=ext, score_type=score_type)
     items = []
     if lines:
         for ln in lines:
@@ -405,7 +416,7 @@ def api_build_manual():
         result = pipeline.build_from_captures(
             captures,
             out_dir=job_dir(job_id),
-            title=data.get("title") or "吉他六線譜",
+            title=data.get("title") or DEFAULT_TITLES[job.get("score_type", "guitar")],
             subtitle=(data.get("subtitle") or "").strip(),
             page_size=data.get("page_size") or "A4",
             enhance=enhance,
@@ -440,6 +451,7 @@ def _run_auto_extract(job_id, params):
         with JOBS_LOCK:
             JOBS[job_id]["status"] = "extracting"
             video_path = JOBS[job_id]["video_path"]
+            score_type = JOBS[job_id].get("score_type", "guitar")
 
         kept, intro_pages = pipeline.extract_sections(
             video_path,
@@ -448,10 +460,11 @@ def _run_auto_extract(job_id, params):
             similarity_threshold=params["similarity_threshold"],
             progress_cb=progress_cb,
             return_intro=True,
+            score_type=score_type,
         )
 
         progress_cb(96, "把每張截圖切成一行一行的譜...")
-        lines, ext = pipeline.split_pages_into_lines(kept)
+        lines, ext = pipeline.split_pages_into_lines(kept, score_type=score_type)
 
         cap_dir = os.path.join(job_dir(job_id), "captures")
         os.makedirs(cap_dir, exist_ok=True)
@@ -547,7 +560,7 @@ def api_preview_layout():
     try:
         pages = pipeline.layout_pages(
             paths,
-            title=data.get("title") or "吉他六線譜",
+            title=data.get("title") or DEFAULT_TITLES[job.get("score_type", "guitar")],
             subtitle=(data.get("subtitle") or "").strip(),
             page_size=data.get("page_size") or "A4",
             scale=data.get("scale") or 1.0,
@@ -640,7 +653,7 @@ def api_process():
         "stride_sec": float(data.get("stride_sec", 0.5)),
         "density_threshold": data.get("density_threshold"),
         "similarity_threshold": int(data.get("similarity_threshold", 6)),
-        "title": data.get("title") or "吉他六線譜",
+        "title": data.get("title") or DEFAULT_TITLES[job.get("score_type", "guitar")],
         "subtitle": (data.get("subtitle") or "").strip(),
         "page_size": data.get("page_size") or "A4",
         "enhance": enhance,
@@ -703,7 +716,7 @@ def api_download_pdf(job_id):
     if not job or job.get("status") != "done":
         return jsonify({"error": "尚未完成"}), 404
     pdf_path = job["result"]["pdf_path"]
-    return send_file(pdf_path, as_attachment=True, download_name="guitar_tab_score.pdf")
+    return send_file(pdf_path, as_attachment=True, download_name="score.pdf")
 
 
 @app.route("/api/download/<job_id>/section/<filename>")
