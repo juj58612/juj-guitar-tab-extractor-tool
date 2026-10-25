@@ -227,3 +227,69 @@ button:hover, .primary:hover { background: var(--accent-dark); }
   font-size: 40px;
   cursor: pointer;
 }
+
+/* 選檔區裡明顯的「選擇影片檔案」按鈕 (實際點擊由蓋在上面的透明 file input 接收) */
+.dropzone .pick-btn {
+  display: inline-block; padding: 10px 22px; border-radius: 8px;
+  background: var(--accent); color: #fff; font-weight: 600; font-size: 1.05em;
+}
+
+/* 次要按鈕 (白底綠框) */
+button.secondary { background: #fff; color: var(--accent); border: 1px solid var(--accent); }
+button.secondary:hover { background: #eef4ea; }
+button:disabled { opacity: .55; cursor: default; }
+
+/* 預覽區：每張譜面一張卡片，兩欄 */
+#step-review .gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 12px;
+  max-height: 70vh;
+  overflow-y: auto;
+  flex-direction: unset;
+}
+#step-review .gallery-item { flex-direction: column; align-items: stretch; }
+#step-review .gallery-item img { height: auto; max-width: 100%; width: 100%; }
+#step-review .gallery-item .meta { display: flex; align-items: center; gap: 8px; }
+.empty-note { padding: 24px; text-align: center; color: var(--muted); border: 1px dashed var(--border); border-radius: 8px; }
+
+/* 上傳區的影片下載網站連結 */
+.download-tip { margin: 12px 0 0; }
+.download-tip a { color: var(--accent); font-weight: 600; }
+
+/* 排版預覽：一頁頁的紙張縮圖 */
+.layout-title { font-size: 15px; margin: 20px 0 0; }
+.layout-pages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 14px;
+  margin-top: 12px;
+  max-height: 75vh;
+  overflow-y: auto;
+  padding: 4px;
+}
+.layout-pages.stale { opacity: .45; }
+.layout-page { text-align: center; font-size: 13px; color: var(--muted); }
+.layout-page img {
+  width: 100%; display: block; background: #fff;
+  border: 1px solid var(--border); border-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0,0,0,.08); cursor: zoom-in; margin-bottom: 4px;
+}
+
+/* 影片下載網站的兩顆連結按鈕 */
+.download-tip p { margin: 12px 0 6px; }
+.dl-links { display: flex; flex-wrap: wrap; gap: 10px; }
+.dl-btn {
+  display: inline-block; padding: 8px 16px; border-radius: 8px;
+  border: 1px solid var(--accent); color: var(--accent); background: #fff;
+  font-size: 14px; font-weight: 600; text-decoration: none;
+}
+.dl-btn:hover { background: #eef4ea; }
+
+/* 逐行預覽：一行譜很寬，改成單欄 */
+#step-review .gallery { grid-template-columns: 1fr; }
+#step-review .gallery-item.kind-intro { border-color: #c9a227; background: #fdf8e6; }
+#step-review .gallery-item.kind-intro img { max-height: 420px; object-fit: contain; }
+#step-review .gallery-item.kind-page img { max-height: 420px; object-fit: contain; }
+
+button { white-space: nowrap; }

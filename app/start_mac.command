@@ -25,6 +25,15 @@ if [ ! -f "venv/.deps_installed" ]; then
   touch venv/.deps_installed
 fi
 
+# 如果之前開的伺服器還在跑 (例如舊的終端機視窗沒關)，先把它關掉，
+# 不然新的伺服器會因為 5001 埠被佔住而啟動失敗，瀏覽器看到的還是舊版程式
+OLD_PIDS=$(lsof -ti tcp:5001 2>/dev/null)
+if [ -n "$OLD_PIDS" ]; then
+  echo "發現之前開啟的伺服器還在執行，先把它關掉..."
+  kill $OLD_PIDS 2>/dev/null
+  sleep 1
+fi
+
 echo ""
 echo "正在啟動伺服器..."
 # 固定用 Google Chrome 開啟 (不用 Safari)；電腦沒裝 Chrome 時才退回預設瀏覽器

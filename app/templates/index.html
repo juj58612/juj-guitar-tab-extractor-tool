@@ -4,12 +4,12 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>吉他六線譜自動擷取工具</title>
-<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ static_v('style.css') }}">
 </head>
 <body>
   <div class="wrap">
     <h1>🎸 吉他六線譜自動擷取工具</h1>
-    <p class="sub">上傳教學影片，自動（或手動挑選）擷取六線譜片段，拼成完整樂譜 PDF。</p>
+    <p class="sub">上傳教學影片，程式會自動掃描、抓出每一頁六線譜並去除重複；預覽確認後，再選擇輸出方式產生 PDF。</p>
 
     <!-- Step 1: 上傳 -->
     <section id="step-upload" class="card">
@@ -21,7 +21,8 @@
 
       <div id="panelFile">
         <div id="dropzone" class="dropzone">
-          <p>把影片拖曳到這裡，或點擊選擇檔案</p>
+          <p><span class="pick-btn">📁 選擇影片檔案</span></p>
+          <p>或直接把影片拖曳到這個框框裡</p>
           <input type="file" id="fileInput" accept="video/*,.mkv,.flv,.ts,.mts,.m2ts">
         </div>
       </div>
@@ -34,18 +35,45 @@
         <p class="hint">請確保你有權利下載與使用這部影片，僅供個人練習/教學用途；下載內容的版權責任由使用者自行負責。</p>
       </div>
 
+      <div class="download-tip">
+        <p class="hint">還沒有影片檔？先用下面的網站把影片下載成 mp4，再回到這裡上傳：</p>
+        <div class="dl-links">
+          <a class="dl-btn" href="https://bilidl.com/zh-tw" target="_blank" rel="noopener noreferrer">📺 下載 Bilibili 影片 (bilidl) ↗</a>
+          <a class="dl-btn" href="https://yt5s.biz/enwr200/" target="_blank" rel="noopener noreferrer">▶️ 下載 YouTube 影片 (yt5s) ↗</a>
+        </div>
+        <p class="hint">請確保你有權利下載與使用該影片，僅供個人練習／教學用途。</p>
+      </div>
+
       <div id="uploadStatus" class="hint"></div>
     </section>
 
-    <!-- Step 2: 選模式 + 框選 -->
+    <!-- 進度 (自動掃描 / 產生 PDF) -->
+    <section id="step-progress" class="card hidden">
+      <h2 id="stepProgressTitle">處理中...</h2>
+      <div class="progress-outer"><div id="progressBar" class="progress-inner"></div></div>
+      <div id="progressMsg" class="hint"></div>
+    </section>
+
+    <!-- Step 2: 預覽擷取結果 -->
+    <section id="step-review" class="card hidden">
+      <h2>2. 預覽擷取到的譜面（一行一行）</h2>
+      <p id="reviewSummary" class="hint"></p>
+      <p class="hint">程式已把每張截圖切成「和弦圖＋五線譜＋六線譜」一行一行，清掉播放提示，並依影片時間排好。點圖可以放大；抓錯或切壞的那一行按「移除」。標示「開頭資訊頁」的是歌名、和弦表、調弦設定等畫面，要不要放進 PDF 由你決定。</p>
+      <div id="gallery" class="gallery"></div>
+      <div class="row">
+        <button type="button" id="toggleAdjustBtn" class="secondary">🛠 調整框選範圍／手動補抓畫面</button>
+      </div>
+    </section>
+
+    <!-- 調整：重新自動擷取 or 手動補抓 (預設收起來) -->
     <section id="step-crop" class="card hidden">
-      <h2>2. 選擇擷取方式、確認譜面區域</h2>
+      <h2>調整擷取</h2>
       <div class="tabbar">
-        <button type="button" id="modeAuto" class="tab-btn active">🤖 自動擷取</button>
+        <button type="button" id="modeAuto" class="tab-btn active">🔄 調整框選後重新自動擷取</button>
         <button type="button" id="modeManual" class="tab-btn">✋ 手動擷取</button>
       </div>
-      <p id="hintAuto" class="hint">程式會掃過整部影片，自動找出譜面畫面並去除重複。已自動偵測譜面所在位置(綠色框)，若不準確，請直接拖曳框線邊緣調整；也可以拖曳下方時間軸換一張畫面。</p>
-      <p id="hintManual" class="hint hidden">自己拖曳時間軸找到譜面畫面，調整綠色框後按「📸 擷取當前畫面」，可以重複擷取多張。適合自動擷取抓錯或漏抓的影片。</p>
+      <p id="hintAuto" class="hint">綠色框是程式偵測到的譜面位置。如果框得不對 (框太小、框到別的東西)，拖曳框線邊緣調整，再按「重新自動擷取」。重新擷取會取代目前預覽區的全部結果。</p>
+      <p id="hintManual" class="hint hidden">拖曳時間軸找到要的畫面，調整綠色框後按「📸 擷取當前畫面」。畫面裡的譜會自動切成一行一行，依時間順序加進上方的預覽區 (切不出行的畫面，例如和弦表，會整張保留)。適合補抓自動擷取漏掉的地方。</p>
       <div id="cropStage" class="crop-stage">
         <img id="previewImg" src="" alt="preview">
         <div id="cropBox" class="crop-box">
@@ -65,20 +93,28 @@
         <button type="button" class="tab-btn" data-seek="1">+1 秒</button>
       </div>
 
+      <div id="autoPanel">
+        <div class="grid">
+          <label>取樣間隔（秒，越小越不會漏抓但越慢）
+            <input type="number" id="strideInput" value="0.5" step="0.1" min="0.1" max="3">
+          </label>
+
+        </div>
+        <div class="row">
+          <button type="button" id="reExtractBtn" class="primary">🔄 用這個框選範圍重新自動擷取</button>
+        </div>
+      </div>
+
       <div id="manualPanel" class="hidden">
         <div class="row seek-btns">
           <button type="button" id="captureBtn" class="primary">📸 擷取當前畫面</button>
         </div>
-        <div id="galleryWrap" class="hidden">
-          <h3>已擷取的片段 (<span id="galleryCount">0</span>)，依時間順序排列</h3>
-          <div id="gallery" class="gallery"></div>
-        </div>
       </div>
     </section>
 
-    <!-- Step 3: 參數 -->
+    <!-- Step 3: 輸出設定 -->
     <section id="step-params" class="card hidden">
-      <h2>3. 輸出設定 (一般不用改，用預設值即可)</h2>
+      <h2>3. 選擇輸出方式</h2>
       <div class="grid">
         <label>樂譜標題
           <input type="text" id="titleInput" value="吉他六線譜">
@@ -92,6 +128,14 @@
             <option value="Letter">Letter</option>
           </select>
         </label>
+        <label>譜的大小（越小每頁塞越多行，越省紙）
+          <select id="scaleInput">
+            <option value="1">100%（撐滿紙張寬度）</option>
+            <option value="0.85">85%</option>
+            <option value="0.7">70%</option>
+            <option value="0.6">60%</option>
+          </select>
+        </label>
         <label>畫質處理
           <select id="enhanceInput">
             <option value="none">不處理 (保留原始截圖)</option>
@@ -99,42 +143,36 @@
             <option value="bw">黑白清晰化 (純黑白，最銳利，適合列印)</option>
           </select>
         </label>
-        <label class="auto-only">取樣間隔（秒，越小越精細但越慢）
-          <input type="number" id="strideInput" value="0.5" step="0.1" min="0.1" max="3">
-        </label>
-        <label class="auto-only">去重複敏感度 %（數字越大，越容易把相似畫面判定為重複）
-          <input type="range" id="simInput" min="0" max="30" value="6">
-          <span id="simLabel">6</span>
-        </label>
       </div>
 
       <div class="row">
-        <button type="button" id="enhancePreviewBtn">👀 預覽畫質處理效果</button>
-        <span class="hint">用目前的時間點和框選區域產生一張預覽</span>
+        <button type="button" id="enhancePreviewBtn" class="secondary">👀 預覽畫質處理效果</button>
+        <span class="hint">用預覽區的第一張譜面示範</span>
       </div>
       <div id="enhancePreviewWrap" class="hidden">
         <p id="enhancePreviewHint" class="hint"></p>
         <img id="enhancePreviewImg" src="" alt="畫質處理預覽" style="max-width:100%;border:1px solid var(--border);border-radius:6px;">
       </div>
 
+      <h3 class="layout-title">排版預覽</h3>
       <div class="row">
-        <button id="startBtn" class="primary">🚀 開始自動產生樂譜</button>
+        <button type="button" id="layoutPreviewBtn" class="secondary">📐 預覽排版</button>
+        <span id="layoutInfo" class="hint">改了紙張大小或譜的大小，會自動更新預覽。</span>
+      </div>
+      <div id="layoutPages" class="layout-pages"></div>
+
+      <div class="row">
+        <button id="startBtn" class="primary">📄 產生樂譜 PDF</button>
       </div>
     </section>
 
-    <!-- Step 4: 進度 -->
-    <section id="step-progress" class="card hidden">
-      <h2 id="stepProgressTitle">處理中...</h2>
-      <div class="progress-outer"><div id="progressBar" class="progress-inner"></div></div>
-      <div id="progressMsg" class="hint"></div>
-    </section>
-
-    <!-- Step 5: 結果 -->
+    <!-- Step 4: 結果 -->
     <section id="step-result" class="card hidden">
       <h2>✅ 完成！</h2>
       <p id="resultSummary"></p>
       <a id="downloadBtn" class="primary" href="#" download>⬇️ 下載樂譜 PDF</a>
-      <button id="restartBtn">重新開始</button>
+      <button id="restartBtn">處理另一部影片</button>
+      <p class="hint">想換一種畫質處理或紙張大小，直接在上面改設定，再按一次「產生樂譜 PDF」即可。</p>
     </section>
 
     <div id="errorBox" class="error hidden"></div>
@@ -146,6 +184,6 @@
     <img id="modalImg" class="modal-content" alt="放大檢視">
   </div>
 
-  <script src="{{ url_for('static', filename='app.js') }}"></script>
+  <script src="{{ static_v('app.js') }}"></script>
 </body>
 </html>
