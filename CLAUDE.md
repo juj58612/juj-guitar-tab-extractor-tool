@@ -34,11 +34,20 @@ python app.py   # http://127.0.0.1:5001
 
 需要 Python 3.9 以上。目前沒有自動化測試。
 
-## 發佈流程（改了 `app/` 之後）
+## 發佈流程（改了 `app/` 之後）—— 使用者要求的固定規則，每次都要做
 
-1. 重新打包兩個 zip：Windows 版拿掉 `start_mac.command`，Mac 版拿掉 `start_windows.bat`，其餘相同
-2. 把 zip 更新到 GitHub Release `v1.0`（吉他＋鋼琴四個安裝包都掛在這裡）。下載頁連結指向 Release，不是 `site/downloads/`
-3. push 到 GitHub `main`，Render 會自動重新部署下載頁
+**只要修改了 `app/` 裡的任何程式，就一定要同時更新下載包，不能只改程式。**
+做不到時（例如沒有權限、使用者還不想發佈），要在回覆裡明確提醒使用者「下載包還沒更新」。
+
+1. 執行 `python3 build_packages.py`（Windows 用 `python build_packages.py`）：
+   自動重新打包 `site/downloads/guitar_tab_extractor_win.zip`、`guitar_tab_extractor_mac.zip`
+   （Windows 版拿掉 `start_mac.command`，Mac 版拿掉 `start_windows.bat`，保留 Mac 啟動檔的執行權限）
+2. 用 GitHub Desktop Commit、Push（程式和兩個 zip 一起）。Summary 欄位一定要填，否則 Commit 按鈕按不下去
+3. Render 會自動重新部署，下載頁按鈕直接下載 `site/downloads/` 裡的檔案
+4. 推送後要到 GitHub 核對檔案內容（例如 md5）跟本機一致，才算完成
+
+（2026-10-25 起不再用 GitHub Release 放安裝包：GitHub Desktop 管不到 Release，使用者操作太麻煩。
+舊的 Release v1.0 已沒有連結指向它。）
 
 ## 工作環境注意事項
 
