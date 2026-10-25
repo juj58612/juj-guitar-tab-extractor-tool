@@ -1,2 +1,6 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+# Windows 啟動檔一律用 CRLF 換行 (cmd.exe 讀 LF 換行的 .bat 有時會解析錯誤)
+*.bat text eol=crlf
+# Mac 啟動檔一律用 LF 換行
+*.command text eol=lf

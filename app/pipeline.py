@@ -38,9 +38,44 @@ Image.init()
 # 基礎工具
 # ---------------------------------------------------------------------------
 
+_CV_PATH_CACHE = {}
+
+
+def _cv_path(path):
+    """
+    回傳一個 OpenCV 讀得到的影片路徑。
+
+    Windows 上的 OpenCV 不支援含中文 (非英數) 字元的路徑 —— 例如工具放在
+    「C:\\Users\\王小明\\Desktop」底下，影片就會讀不到。這時候先試著用 Windows 的
+    「8.3 短檔名」(純英數)；如果系統關掉了短檔名，就把影片複製一份到純英數的
+    暫存資料夾 (C:\\gte_cache) 再讀。Mac / Linux 沒有這個問題，原路徑直接用。
+    """
+    if os.name != "nt" or str(path).isascii():
+        return path
+    if path in _CV_PATH_CACHE and os.path.exists(_CV_PATH_CACHE[path]):
+        return _CV_PATH_CACHE[path]
+    try:
+        import ctypes
+        buf = ctypes.create_unicode_buffer(1024)
+        if ctypes.windll.kernel32.GetShortPathNameW(str(path), buf, 1024) and buf.value.isascii():
+            _CV_PATH_CACHE[path] = buf.value
+            return buf.value
+    except Exception:
+        pass
+    import hashlib
+    cache_dir = os.path.join(os.environ.get("SystemDrive", "C:") + os.sep, "gte_cache")
+    os.makedirs(cache_dir, exist_ok=True)
+    name = hashlib.md5(str(path).encode("utf-8")).hexdigest()[:16] + os.path.splitext(path)[1]
+    dst = os.path.join(cache_dir, name)
+    if not os.path.exists(dst) or os.path.getsize(dst) != os.path.getsize(path):
+        shutil.copyfile(path, dst)
+    _CV_PATH_CACHE[path] = dst
+    return dst
+
+
 def get_video_info(path):
     """回傳 (duration_sec, width, height, fps)"""
-    cap = cv2.VideoCapture(path)
+    cap = cv2.VideoCapture(_cv_path(path))
     if not cap.isOpened():
         raise RuntimeError("無法開啟影片，請確認檔案格式是否支援 (建議 mp4/mov/mkv)")
     fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
@@ -54,7 +89,7 @@ def get_video_info(path):
 
 def grab_frame_at(path, t_sec):
     """抓取影片在 t_sec 秒時的畫面，回傳 PIL.Image (RGB) 或 None"""
-    cap = cv2.VideoCapture(path)
+    cap = cv2.VideoCapture(_cv_path(path))
     if not cap.isOpened():
         return None
     cap.set(cv2.CAP_PROP_POS_MSEC, max(0, t_sec) * 1000.0)
@@ -375,7 +410,7 @@ def extract_sections(
 
     # --- 1. 取樣並計算每張的邊緣密度 -------------------------------------------------
     report(2, "正在讀取影片...")
-    cap = cv2.VideoCapture(path)
+    cap = cv2.VideoCapture(_cv_path(path))
     if not cap.isOpened():
         raise RuntimeError("無法開啟影片")
 

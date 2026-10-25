@@ -31,9 +31,25 @@ if not exist venv\.deps_installed (
   type nul > venv\.deps_installed
 )
 
+rem If a server from an earlier run is still running (e.g. an old window was
+rem not closed), stop it first. Otherwise the new server cannot use port 5001
+rem and the browser keeps showing the OLD version of the tool.
+for /f "tokens=5" %%p in ('netstat -ano ^| findstr /r /c:":5001 .*LISTENING"') do (
+  echo Stopping the server that is still running from before...
+  taskkill /PID %%p /F >nul 2>nul
+)
+
+rem Always open the tool in Google Chrome (not Edge); fall back to the default
+rem browser only when Chrome is not installed.
+set "GTE_CHROME="
+if exist "%ProgramFiles%\Google\Chrome\Application\chrome.exe" set "GTE_CHROME=%ProgramFiles%\Google\Chrome\Application\chrome.exe"
+if not defined GTE_CHROME if exist "%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe" set "GTE_CHROME=%ProgramFiles(x86)%\Google\Chrome\Application\chrome.exe"
+if not defined GTE_CHROME if exist "%LocalAppData%\Google\Chrome\Application\chrome.exe" set "GTE_CHROME=%LocalAppData%\Google\Chrome\Application\chrome.exe"
+if not defined GTE_CHROME echo Google Chrome was not found, the default browser will be used instead.
+
 echo.
 echo Starting server...
-start "" /B cmd /c "timeout /t 2 >nul & start http://127.0.0.1:5001"
+start "" /B powershell -NoProfile -ExecutionPolicy Bypass -Command "Start-Sleep -Seconds 2; if ($env:GTE_CHROME) { Start-Process -FilePath $env:GTE_CHROME -ArgumentList 'http://127.0.0.1:5001' } else { Start-Process 'http://127.0.0.1:5001' }"
 
 python app.py
 
