@@ -1,10 +1,12 @@
-這個資料夾故意不把 zip 檔案放進 git repo (兩個安裝包各約 15MB，會讓 repo 越滾越大)。
+這個資料夾放的是下載頁 (site/index.html) 兩個下載按鈕提供的安裝包：
 
-實際做法：把 guitar_tab_extractor_win.zip / guitar_tab_extractor_mac.zip
-上傳成這個 GitHub repo 的一個 Release 附件，然後把 site/index.html 裡兩個下載按鈕的
-href 換成該 Release 附件的直接下載網址，格式是：
+  guitar_tab_extractor_win.zip   Windows 版（吉他譜／鋼琴譜都適用）
+  guitar_tab_extractor_mac.zip   Mac 版（吉他譜／鋼琴譜都適用）
 
-  https://github.com/<你的帳號>/<repo名稱>/releases/download/<tag>/guitar_tab_extractor_win.zip
-  https://github.com/<你的帳號>/<repo名稱>/releases/download/<tag>/guitar_tab_extractor_mac.zip
+更新安裝包的方法（2026-10-25 起改用這個方式，不再用 GitHub Release）：
+  1. 改完 app/ 的程式後，重新打包這兩個 zip，覆蓋這個資料夾裡的同名檔案
+     （Windows 版拿掉 start_mac.command，Mac 版拿掉 start_windows.bat）
+  2. 用 GitHub Desktop 按 Commit、Push
+  3. Render 會自動重新部署，下載頁的按鈕就會下載到新版
 
-這兩個 zip 檔案 Claude 已經另外幫你打包好、透過對話直接傳給你了，不在這個 repo 壓縮檔裡。
+每次更新會讓 repo 多約 30MB，在 GitHub 的限制內。
