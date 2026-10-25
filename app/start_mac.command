@@ -27,7 +27,9 @@ fi
 
 echo ""
 echo "正在啟動伺服器..."
-( sleep 2 && open "http://127.0.0.1:5001" ) &
+# 固定用 Google Chrome 開啟 (不用 Safari)；電腦沒裝 Chrome 時才退回預設瀏覽器
+URL="http://127.0.0.1:5001"
+( sleep 2 && { open -a "Google Chrome" "$URL" 2>/dev/null || { echo "找不到 Google Chrome，改用預設瀏覽器開啟。"; open "$URL"; }; } ) &
 
 python app.py
 
