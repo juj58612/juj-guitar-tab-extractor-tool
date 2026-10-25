@@ -92,6 +92,8 @@
     border-radius: 4px;
     font-size: 13px;
   }
+  .updated { font-size: 13px; color: var(--muted); margin: -4px 0 0; }
+  .steps ul { padding-left: 20px; margin: 4px 0; }
   .port-tag {
     display: inline-block;
     font-size: 12px;
@@ -121,9 +123,12 @@
     <div class="card tool-card guitar">
       <h2>🎸 吉他六線譜自動擷取工具 <span class="port-tag">本機連接埠 5001</span></h2>
       <p>
-        上傳吉他教學影片，自動辨識六線譜(Tab)片段、去除重複畫面，拼成完整樂譜 PDF。
+        上傳吉他教學影片，程式會自動掃描、把譜切成一行一行（和弦圖＋五線譜＋六線譜，含歌詞），
+        清掉播放提示框與游標、去除捲動造成的重複，預覽確認後再緊密排版成 PDF，省紙又好讀。
+        整頁都是譜的影片、譜只在畫面下方的影片都能處理。
         影片分析與 PDF 產生都在<strong>你自己的電腦</strong>上執行，影片內容完全不會離開你的裝置。
       </p>
+      <p class="updated">🆕 2026-10-25 更新：逐行切譜、支援下方譜卡與歌詞、排版預覽、Windows 中文路徑修正。</p>
       <div class="downloads">
         <a class="dl-btn" href="https://github.com/juj58612/juj-guitar-tab-extractor-tool/releases/download/v1.0/guitar_tab_extractor_win.zip">
           <span class="icon">🪟</span>
@@ -145,6 +150,7 @@
         上傳鋼琴教學影片，自動辨識五線譜片段、去除重複畫面，拼成完整樂譜 PDF。
         跟吉他版架構相同、可以同時安裝，連接埠不同(5001 / 5002)不會互相衝突。
       </p>
+      <p class="updated">ℹ️ 鋼琴版尚未加入吉他版的新功能（逐行切譜等），之後會合併成同一個工具。</p>
       <div class="downloads">
         <a class="dl-btn" href="https://github.com/juj58612/juj-guitar-tab-extractor-tool/releases/download/v1.0/piano_score_extractor_win.zip">
           <span class="icon">🪟</span>
@@ -169,11 +175,21 @@
           Windows 使用者安裝時記得勾選「Add Python to PATH」。
         </li>
         <li>
-          啟動工具：Windows 雙擊資料夾裡的 <code>start_windows.bat</code>；Mac 雙擊 <code>start_mac.command</code>
-          （Mac 如果顯示「無法開啟，因為來自不明開發者」，在 Finder 對檔案按右鍵 →「打開」即可，只需做一次）。
+          啟動工具：Windows 雙擊資料夾裡的 <code>start_windows.bat</code>；Mac 雙擊 <code>start_mac.command</code>。
+          工具會自動用 Google Chrome 開啟（沒有安裝 Chrome 時改用預設瀏覽器）。
         </li>
-        <li>第一次啟動會自動安裝所需套件，需要等待幾分鐘；之後每次啟動只需幾秒鐘，會自動打開瀏覽器（吉他版 <code>http://127.0.0.1:5001</code>，鋼琴版 <code>http://127.0.0.1:5002</code>）。</li>
-        <li>上傳影片、確認譜面框選區域、按下開始，等待處理完成後下載 PDF 即可。</li>
+        <li>
+          <strong>第一次開啟時出現安全警告是正常的</strong>（因為檔案是從網路下載的），處理方式：
+          <ul>
+            <li><strong>Mac</strong>：出現「Apple 無法驗證…」時按「完成」（<strong>不要</strong>按「丟到垃圾桶」），
+              接著打開「系統設定 → 隱私權與安全性」，往下捲到「安全性」，按「仍要打開」並輸入密碼，再雙擊一次即可。
+              （較舊的 macOS：在 Finder 對檔案按右鍵 →「打開」。）</li>
+            <li><strong>Windows</strong>：出現藍色的「Windows 已保護您的電腦」時，按「其他資訊」→「仍要執行」。</li>
+          </ul>
+          只需要處理一次，之後雙擊就會直接啟動。
+        </li>
+        <li>第一次啟動會自動安裝所需套件，需要等待幾分鐘；之後每次啟動只需幾秒鐘（吉他版 <code>http://127.0.0.1:5001</code>，鋼琴版 <code>http://127.0.0.1:5002</code>）。使用時請不要關掉啟動後出現的黑色視窗。</li>
+        <li>吉他版：上傳影片後會<strong>自動掃描擷取</strong>，在預覽區移除抓錯的行，選好紙張與譜的大小（可先預覽排版），再按「產生樂譜 PDF」下載。漏抓的地方可以用「手動補抓畫面」補上。</li>
       </ol>
     </div>
 
