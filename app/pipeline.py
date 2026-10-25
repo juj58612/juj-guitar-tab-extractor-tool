@@ -96,6 +96,28 @@ def suggest_crop_box(path, duration, samples=10):
 
     med = np.median(np.array(light_profiles), axis=0)
 
+    # 「整個畫面都是譜」的影片 (例如 Guitar Pro / MuseScore 播放畫面，譜面佔滿全螢幕，
+    # 只有左右可能有黑邊)：大部分的列都是淺色背景，找不到「從暗轉亮」的分界。
+    # 這種情況下直接框住整塊淺色的譜面頁 (左右裁掉黑邊)，而不是退回「下半部」——
+    # 退回下半部只會框到半頁譜，而且換頁時內容變化太小、自動擷取會判斷不出換頁。
+    if np.mean(med > 0.5) >= 0.8:
+        col_profiles = []
+        for t in ts:
+            img = grab_frame_at(path, t)
+            if img is None:
+                continue
+            arr = np.array(img).astype(np.float32)
+            mx = arr.max(axis=2)
+            sat = mx - arr.min(axis=2)
+            col_profiles.append(((mx > 190) & (sat < 40)).mean(axis=0))
+        cmed = np.median(np.array(col_profiles), axis=0)
+        cols = np.where(cmed > 0.5)[0]
+        rows = np.where(med > 0.5)[0]
+        if len(cols) > width * 0.3 and len(rows) > 0:
+            x0, x1 = int(cols[0]), int(cols[-1]) + 1
+            y0, y1 = int(rows[0]), int(rows[-1]) + 1
+            return {"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0}
+
     # 由上而下找「從暗轉亮」且持續穩定的那一列，當作譜面卡片的頂端
     y0 = None
     for i in range(len(med) - 5):
@@ -157,28 +179,47 @@ def _otsu_threshold(values):
     return float(th) / 255.0 * vmax
 
 
-SIG_SIZE = (320, 72)  # 縮小後拿來比對內容是否相同的統一尺寸
+SIG_WIDTH = 320  # 縮小後拿來比對內容是否相同的統一寬度 (高度依原比例)
 
 
 def _content_signature(pil_img):
     """
-    把畫面轉成「純黑白內容遮罩」，用來判斷兩張截圖是不是「同一份譜面」。
+    把畫面轉成「墨跡遮罩」(哪些像素是黑色的線條/音符/數字)，用來判斷兩張截圖
+    是不是「同一份譜面」。
 
     這裡刻意不用一般的感知雜湊(perceptual hash)，因為這類教學影片常常會在
     譜面上疊一層會移動的「目前彈到哪裡」淺色提示框(高亮目前小節)——同一份
     譜面、只是提示框位置不同，畫面在感知雜湊上卻會被誤判成「差很多」。
-    直接比對二值化後的黑白內容遮罩，只看「線條與數字」本身有沒有變，
+    直接比對二值化後的墨跡，只看「線條與數字」本身有沒有變，
     對這種半透明提示框的干擾就穩定得多。
+
+    縮圖保留原本的長寬比 (以前固定壓成 320x72，整頁的譜會被壓扁到看不出差異)；
+    稍微膨脹墨跡，讓影片壓縮造成的 1 像素抖動不會被當成內容改變。
     """
-    gray = np.array(pil_img.convert("L").resize(SIG_SIZE, Image.LANCZOS))
-    _, bw = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    return bw
+    w, h = pil_img.size
+    sig_h = max(24, min(SIG_WIDTH, int(round(SIG_WIDTH * h / max(1, w)))))
+    gray = np.array(pil_img.convert("L").resize((SIG_WIDTH, sig_h), Image.LANCZOS))
+    _, ink = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    ink = cv2.dilate(ink, np.ones((3, 3), np.uint8))
+    return ink > 0
 
 
 def _content_diff(sig_a, sig_b):
-    """回傳兩個內容遮罩之間「不一樣的像素」比例 (0~1)"""
-    diff = sig_a != sig_b
-    return float(np.mean(diff))
+    """
+    回傳兩張譜面「墨跡不一樣的比例」(0~1)：不一樣的墨跡 ÷ 兩張合起來的墨跡。
+
+    以前是除以「整張圖的像素數」——但譜面大部分是白底，就算整頁換掉，不同的
+    像素也只佔整張圖的 2% 左右，低於「換頁」門檻，導致整支影片被當成同一頁、
+    自動擷取只剩 1 張。改成只看墨跡之後：同一頁 (只有提示框移動) 約 0~6%，
+    換到另一頁約 70~90%，兩者分得很清楚。
+    """
+    if sig_a.shape != sig_b.shape:
+        sig_b = cv2.resize(sig_b.astype(np.uint8), (sig_a.shape[1], sig_a.shape[0]),
+                           interpolation=cv2.INTER_NEAREST) > 0
+    union = np.logical_or(sig_a, sig_b).sum()
+    if union == 0:
+        return 0.0
+    return float(np.logical_xor(sig_a, sig_b).sum()) / float(union)
 
 
 def _count_staff_lines(pil_img):
@@ -364,6 +405,13 @@ def process_video(
         # 改用 Otsu 法在分數的直方圖上找「兩群資料之間的山谷」，
         # 不管譜面畫面佔比高低都能抓到正確的分界點。
         density_threshold = float(_otsu_threshold(all_scores))
+        # 如果整支影片幾乎全程都是譜面 (例如全螢幕的譜面播放影片)，分數根本不是
+        # 「譜面 / 非譜面」兩群，Otsu 會硬把譜面切成兩半、丟掉一半的譜面畫面。
+        # 這時候改用寬鬆的門檻 (中位數的一半)，只濾掉黑畫面/空白畫面。
+        low = all_scores[all_scores <= density_threshold]
+        high = all_scores[all_scores > density_threshold]
+        if len(low) and len(high) and low.mean() > 0.6 * high.mean():
+            density_threshold = float(np.median(all_scores) * 0.5)
 
     density_pass = [(t, crop, score) for (t, crop, score) in scores if score > density_threshold]
 
@@ -391,7 +439,7 @@ def process_video(
     # 連續出現好幾張「內容其實一樣、提示框位置不同」的畫面，這裡用內容遮罩比對
     # 把它們合併成同一段，只取其中最清晰的一張。
     report(68, "偵測譜面切換中...")
-    CONTENT_SAME_FRACTION = 0.04  # 內容差異在 4% 以內，視為同一張譜面(只是提示框移動)
+    CONTENT_SAME_FRACTION = 0.25  # 墨跡差異在 25% 以內，視為同一張譜面(只是提示框移動)
 
     runs = []
     cur_run = []
@@ -428,7 +476,9 @@ def process_video(
     # --- 4. 去除「跨時間重複」的譜面 -----------------------------------------------
     # (例如同一段落被重複講解/回顧，後面出現的重複畫面就濾掉，只保留第一次出現的)
     report(78, "比對去除重複譜面中...")
-    dup_fraction = max(0.0, min(1.0, similarity_threshold / 100.0))
+    # 介面上的「去重複敏感度」滑桿是 0~30 (預設 6)；換算成墨跡差異門檻 8%~68%
+    # (預設 20%)。同一頁重複出現的差異通常在 10% 以內，不同頁則在 60% 以上。
+    dup_fraction = max(0.0, min(0.9, 0.08 + similarity_threshold * 0.02))
     kept = []
     kept_sigs = []
     for t, crop in representatives:
