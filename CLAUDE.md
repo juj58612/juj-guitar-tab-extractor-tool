@@ -49,11 +49,23 @@ python app.py   # http://127.0.0.1:5001
 （2026-10-25 起不再用 GitHub Release 放安裝包：GitHub Desktop 管不到 Release，使用者操作太麻煩。
 舊的 Release v1.0 已沒有連結指向它。）
 
+## 常態提醒（使用者要求「要常提醒我」，不要刪）
+
+使用者常在 Mac、Windows 兩台電腦輪流做同一個專案，對 Claude 本機／雲端模式不熟、常忘記。只要對話中出現「電腦上還沒有這個專案」、「要同步到這台電腦」、或發現目前是雲端 session（工作目錄是 `/home/user/...`），就主動提醒：
+
+> **本機還沒有這個專案時：**
+> 1. 先用 **GitHub Desktop → File → Clone Repository** 把專案抓到硬碟
+> 2. 再到 Claude 的 **`</>` Code**，開新對話並**選剛才 Clone 下來的資料夾**，就是本機模式
+>
+> **兩台電腦輪流做：** 開工前 Fetch origin → Pull origin；收工前 Commit → **Push origin**（一定要 Push）
+>
+> （💬／`</>` 是 Chat／Code 切換，不是雲端／本機切換。開新對話後可請 Claude 執行 `pwd`：看到 `/home/user/...` 就是雲端。）
+
 ## 工作環境注意事項
 
 - 這個 repo 在兩台電腦上輪流維護：Mac（放在外接硬碟 `/Volumes/1T  01/`，路徑中有兩個空格，指令中要加引號），以及學校網域 163.20.0.X 的 Windows
 - 使用者平常用 GitHub Desktop 做 Commit／Push。開始改之前先 pull，改完要 push
-- **在 Windows 上開 session 時**：先跑 `git fetch` 檢查吉他、鋼琴兩個 repo 是否落後 GitHub，落後就提醒使用者在 GitHub Desktop 按 Fetch origin → Pull 再開始（使用者要求的提醒）
+- **在 Windows 上開 session 時**：先跑 `git fetch` 檢查吉他、鋼琴、和弦練習工具（`juj-chord-practice-tool`）三個 repo 是否落後 GitHub，落後就提醒使用者在 GitHub Desktop 按 Fetch origin → Pull 再開始（使用者要求的提醒）
 - Chat／Cowork 時期的工作也是在這個資料夾裡做的
 
 ## 重要決策
